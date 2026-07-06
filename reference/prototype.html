@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tarjetero · Finanzas Premium</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;color:#26233a;-webkit-font-smoothing:antialiased}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:rgba(109,94,246,.28);border-radius:20px}
+  ::-webkit-scrollbar-track{background:transparent}
+  input,select,button,textarea{font-family:inherit}
+  @keyframes float1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(40px,30px) scale(1.08)}}
+  @keyframes float2{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-50px,20px) scale(1.12)}}
+  @keyframes popin{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+  @keyframes fadein{from{opacity:0}to{opacity:1}}
+  .tj-pop{animation:popin .32s cubic-bezier(.2,.8,.2,1) both}
+  @media(max-width:900px){
+    .tj-shell{grid-template-columns:1fr !important}
+    .tj-side{position:sticky;top:0;flex-direction:row !important;height:auto !important;overflow-x:auto;z-index:20}
+    .tj-sidecards{display:none !important}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+(function(){
+  "use strict";
+
+  // ---- configurable presentation props (mirrors the original design props) ----
+  var PROPS = {
+    dashLayout: 'grid',      // 'grid' | 'list'
+    cardDesign: 'gradient',  // 'gradient' | 'frost' | 'noir'
+    accent: '#6D5EF6',
+    showBlobs: true
+  };
+
+  var THEMES = ['violet','coral','ocean','teal','rose','noir'];
+  var CATEGORIES = ['Tecnología','Supermercado','Indumentaria','Viajes','Ocio','Servicios','Salud','Otros'];
+  var STORE_KEY = 'tarjetero_v4';
+
+  var root = document.getElementById('root');
+
+  // ============================ STATE ============================
+  function emptyCardForm(theme){ return {nickname:'', holder:'Alexandra Vaise', brand:'visa', last4:'', expiry:'', limit:'', limitCurrency:'ARS', theme:theme||'violet'}; }
+  function emptyPurchaseForm(cardId){ var t=new Date().toISOString().slice(0,10); return {cardId:cardId||'', merchant:'', amount:'', currency:'USD', installments:'3', paidInstallments:'0', category:'Tecnología', date:t}; }
+  function emptyDebtForm(){ return {creditor:'', note:'', amount:'', currency:'ARS', installments:'12', paidInstallments:'0'}; }
+
+  function seed(){
+    return {
+      view:'dashboard', selectedCardId:null, modal:null,
+      rates:{ARS:1, USD:1015, EUR:1120},
+      cards:[
+        {id:'c1', nickname:'Santander Visa', holder:'Alexandra Vaise', brand:'visa', last4:'1099', limit:1800000, limitCurrency:'ARS', expiry:'08/27', theme:'violet'},
+        {id:'c2', nickname:'Galicia Master', holder:'Alexandra Vaise', brand:'mastercard', last4:'4821', limit:2600000, limitCurrency:'ARS', expiry:'03/28', theme:'coral'},
+        {id:'c3', nickname:'BBVA Visa', holder:'Alexandra Vaise', brand:'visa', last4:'7734', limit:1400000, limitCurrency:'ARS', expiry:'11/26', theme:'ocean'}
+      ],
+      purchases:[
+        {id:'p1', cardId:'c1', merchant:'Apple Store', amount:1200, currency:'USD', installments:12, paidInstallments:3, category:'Tecnología', date:'2026-02-01'},
+        {id:'p2', cardId:'c1', merchant:'Coto Supermercado', amount:85000, currency:'ARS', installments:3, paidInstallments:1, category:'Supermercado', date:'2026-05-14'},
+        {id:'p3', cardId:'c2', merchant:'Dyson', amount:1100, currency:'USD', installments:6, paidInstallments:2, category:'Tecnología', date:'2026-01-26'},
+        {id:'p4', cardId:'c2', merchant:'Zara', amount:240, currency:'EUR', installments:6, paidInstallments:0, category:'Indumentaria', date:'2026-04-08'},
+        {id:'p5', cardId:'c3', merchant:'Despegar · Viaje', amount:900, currency:'USD', installments:9, paidInstallments:4, category:'Viajes', date:'2026-03-11'},
+        {id:'p6', cardId:'c2', merchant:'Farmacity', amount:32000, currency:'ARS', installments:3, paidInstallments:0, category:'Salud', date:'2026-06-02'}
+      ],
+      debts:[
+        {id:'d1', creditor:'Mi primo Juan', note:'Préstamo para la moto', amount:1000, currency:'USD', installments:12, paidInstallments:3}
+      ],
+      form:emptyCardForm(THEMES[3]),
+      pform:emptyPurchaseForm(),
+      dform:emptyDebtForm()
+    };
+  }
+
+  function load(){
+    try{
+      var s=localStorage.getItem(STORE_KEY);
+      if(!s) return null;
+      var d=JSON.parse(s);
+      d.modal=null;
+      if(!d.debts) d.debts=[];
+      if(!d.dform) d.dform=emptyDebtForm();
+      if(!d.form) d.form=emptyCardForm(THEMES[3]);
+      if(!d.pform) d.pform=emptyPurchaseForm();
+      return d;
+    }catch(e){ return null; }
+  }
+  function save(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(e){} }
+
+  var state = load() || seed();
+  if(!state.debts) state.debts=[];
+
+  function setState(patch){
+    var p = (typeof patch==='function') ? patch(state) : patch;
+    for(var k in p) state[k]=p[k];
+    render();
+  }
+  function setForm(store, key, val){
+    var next = {}; next[key]=val;
+    var merged = {}; var cur = state[store]||{};
+    for(var k in cur) merged[k]=cur[k];
+    merged[key]=val;
+    var patch = {}; patch[store]=merged;
+    setState(patch);
+  }
+
+  // ============================ HELPERS ============================
+  function rate(c){ return state.rates[c] || 1; }
+  function fmt(n){ return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(Math.round(n||0)); }
+  function fmtShort(n){ n=Math.round(n||0); if(n>=1000000) return '$'+(n/1000000).toFixed(1).replace('.0','')+'M'; if(n>=1000) return '$'+Math.round(n/1000)+'k'; return '$'+n; }
+  function curSym(c){ return {ARS:'$', USD:'US$', EUR:'€'}[c]||''; }
+  function fmtCur(a,c){ return curSym(c)+' '+new Intl.NumberFormat('es-AR',{maximumFractionDigits:0}).format(Math.round(a||0)); }
+  function fmtDate(d){ try{ return new Date(d+'T00:00').toLocaleDateString('es-AR',{day:'numeric',month:'short'}); }catch(e){ return d; } }
+  function themeColors(t){ return ({
+    violet:['#7C6BF7','#A99CFB'], coral:['#F0996A','#F6C4A0'], ocean:['#5B7CF7','#8FB4FB'],
+    teal:['#2FB79A','#7FD9C4'], rose:['#EC6A8C','#F4A7BC'], noir:['#3A3A48','#565672']
+  })[t] || ['#7C6BF7','#A99CFB']; }
+  function catColor(c){ return ({
+    'Tecnología':'#7C6BF7','Supermercado':'#F0996A','Indumentaria':'#5B9CF0','Viajes':'#2FB79A',
+    'Ocio':'#C879D8','Servicios':'#E8B94E','Salud':'#EC6A8C','Otros':'#9AA0B4'
+  })[c] || '#9AA0B4'; }
+  function hexA(hex,a){ var h=hex.replace('#',''); var r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16); return 'rgba('+r+','+g+','+b+','+a+')'; }
+
+  function bgStyle(theme){
+    var design = PROPS.cardDesign || 'gradient';
+    var cc = themeColors(theme), a=cc[0], b=cc[1];
+    var base = {position:'absolute', inset:'0', borderRadius:'22px'};
+    if(design==='frost'){ base.background='linear-gradient(135deg, '+hexA(a,.62)+', '+hexA(b,.34)+')'; base.backdropFilter='blur(6px)'; base.border='1px solid rgba(255,255,255,.4)'; return base; }
+    if(design==='noir'){ base.background='linear-gradient(135deg,#25252f,#3a3a49)'; base.boxShadow='inset 4px 0 0 '+a; return base; }
+    base.background='linear-gradient(135deg, '+a+' 0%, '+b+' 100%)';
+    return base;
+  }
+  function cardBox(h){ return {position:'relative', borderRadius:'22px', padding:'18px', height:(h||190)+'px', overflow:'hidden', cursor:'pointer', boxShadow:'0 14px 34px rgba(80,60,180,.22)'}; }
+
+  function metrics(card){
+    var ps = state.purchases.filter(function(p){ return p.cardId===card.id; });
+    var debt=0;
+    ps.forEach(function(p){ var tot=p.amount*rate(p.currency); var rem=tot*(p.installments-p.paidInstallments)/(p.installments||1); debt+=rem; });
+    var limit = card.limit*rate(card.limitCurrency||'ARS');
+    var avail = limit-debt;
+    var pct = limit>0 ? Math.min(1, debt/limit) : 0;
+    return {debt:debt, limit:limit, avail:avail, pct:pct, count:ps.length};
+  }
+
+  // ============================ ACTIONS ============================
+  function onGoHome(){ setState({view:'dashboard', selectedCardId:null}); }
+  function openCard(id){ setState({view:'card', selectedCardId:id}); }
+  function openCardModal(){ setState({modal:'card', form:emptyCardForm(THEMES[state.cards.length%THEMES.length])}); }
+  function openPurchaseModal(){ var cid=state.selectedCardId || (state.cards[0]&&state.cards[0].id) || ''; setState({modal:'purchase', pform:emptyPurchaseForm(cid)}); }
+  function openSettings(){ setState({modal:'settings'}); }
+  function openDebtModal(){ setState({modal:'debt', dform:emptyDebtForm()}); }
+  function closeModal(){ setState({modal:null}); }
+
+  function submitCard(){
+    var f=state.form;
+    if(!f.nickname.trim() || !(parseFloat(f.limit)>0)) return;
+    var card={ id:'c'+Date.now(), nickname:f.nickname.trim(), holder:f.holder.trim()||'—', brand:f.brand, last4:(f.last4||'0000').padStart(4,'0').slice(-4), limit:parseFloat(f.limit), limitCurrency:f.limitCurrency, expiry:f.expiry.trim()||'--/--', theme:f.theme };
+    setState(function(s){ return {cards:s.cards.concat([card]), modal:null}; });
+  }
+  function submitPurchase(){
+    var f=state.pform;
+    if(!f.cardId || !(parseFloat(f.amount)>0)) return;
+    var inst=Math.max(1, parseInt(f.installments)||1);
+    var paid=Math.min(inst, Math.max(0, parseInt(f.paidInstallments)||0));
+    var p={ id:'p'+Date.now(), cardId:f.cardId, merchant:f.merchant.trim()||'Compra', amount:parseFloat(f.amount), currency:f.currency, installments:inst, paidInstallments:paid, category:f.category, date:f.date };
+    setState(function(s){ return {purchases:s.purchases.concat([p]), modal:null}; });
+  }
+  function submitSettings(){ setState({modal:null}); }
+  function submitDebt(){
+    var f=state.dform;
+    if(!f.creditor.trim() || !(parseFloat(f.amount)>0)) return;
+    var inst=Math.max(1,parseInt(f.installments)||1);
+    var paid=Math.min(inst,Math.max(0,parseInt(f.paidInstallments)||0));
+    var d={id:'d'+Date.now(), creditor:f.creditor.trim(), note:f.note.trim(), amount:parseFloat(f.amount), currency:f.currency, installments:inst, paidInstallments:paid};
+    setState(function(s){ return {debts:s.debts.concat([d]), modal:null}; });
+  }
+  function deleteCard(id){ setState(function(s){ return {cards:s.cards.filter(function(c){return c.id!==id;}), purchases:s.purchases.filter(function(p){return p.cardId!==id;}), view:s.selectedCardId===id?'dashboard':s.view, selectedCardId:s.selectedCardId===id?null:s.selectedCardId}; }); }
+  function deletePurchase(id){ setState(function(s){ return {purchases:s.purchases.filter(function(p){return p.id!==id;})}; }); }
+  function payDelta(id,d){ setState(function(s){ return {purchases:s.purchases.map(function(p){ if(p.id!==id)return p; var np=Math.min(p.installments, Math.max(0, p.paidInstallments+d)); var n={}; for(var k in p)n[k]=p[k]; n.paidInstallments=np; return n; })}; }); }
+  function payCard(cardId){ setState(function(s){ return {purchases:s.purchases.map(function(p){ if(p.cardId!==cardId)return p; var n={}; for(var k in p)n[k]=p[k]; n.paidInstallments=p.installments; return n; })}; }); }
+  function deleteDebt(id){ setState(function(s){ return {debts:s.debts.filter(function(d){return d.id!==id;})}; }); }
+  function payDebtDelta(id,delta){ setState(function(s){ return {debts:s.debts.map(function(d){ if(d.id!==id)return d; var np=Math.min(d.installments,Math.max(0,d.paidInstallments+delta)); var n={}; for(var k in d)n[k]=d[k]; n.paidInstallments=np; return n; })}; }); }
+
+  // ============================ RENDER UTILITIES ============================
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function kebab(k){ return k.charAt(0)==='-' ? k : k.replace(/[A-Z]/g, function(m){ return '-'+m.toLowerCase(); }); }
+  function css(obj){
+    var out=[];
+    for(var k in obj){ if(obj[k]==null) continue; out.push(kebab(k)+':'+obj[k]); }
+    return out.join(';');
+  }
+
+  var CARD_HALO = 'position:absolute;top:-30px;right:-20px;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.28),transparent 70%);pointer-events:none';
+  var GLASS = 'background:rgba(255,255,255,.6);backdrop-filter:blur(24px) saturate(1.5);-webkit-backdrop-filter:blur(24px) saturate(1.5);border:1px solid rgba(255,255,255,.75);box-shadow:0 8px 30px rgba(80,70,160,.1)';
+
+  function brandMark(v, size){
+    if(v.isVisa) return '<div style="font-style:italic;font-weight:800;font-size:'+(size||19)+'px;letter-spacing:.02em;text-shadow:0 1px 2px rgba(0,0,0,.15)">VISA</div>';
+    if(v.isMaster){ var d=size&&size>19?28:24, w=size&&size>19?46:38, h=d; return '<div style="position:relative;width:'+w+'px;height:'+h+'px"><div style="position:absolute;left:0;top:0;width:'+d+'px;height:'+d+'px;border-radius:50%;background:#EB001B"></div><div style="position:absolute;right:0;top:0;width:'+d+'px;height:'+d+'px;border-radius:50%;background:#F79E1B;mix-blend-mode:hard-light;opacity:.9"></div></div>'; }
+    return '';
+  }
+
+  // ============================ VIEW MODEL ============================
+  function renderVals(){
+    var S=state;
+    var accent = PROPS.accent || '#6D5EF6';
+    var layout = PROPS.dashLayout || 'grid';
+    var showBlobs = PROPS.showBlobs !== false;
+
+    var rootStyle = {
+      minHeight:'100vh', position:'relative', color:'#26233a',
+      '--acc':accent, '--grad':'linear-gradient(135deg, '+accent+', #A99CFB)',
+      background:'radial-gradient(1200px 800px at 12% -8%, #E9E5FB, transparent), radial-gradient(1000px 700px at 100% 0%, #EFE9FA, transparent), linear-gradient(180deg,#F3F1FC,#EBE9F8)'
+    };
+
+    var tDebt=0,tLimit=0,tAvail=0;
+    S.cards.forEach(function(c){ var m=metrics(c); tDebt+=m.debt; tLimit+=m.limit; tAvail+=m.avail; });
+
+    var activeSide=function(id){ return S.view==='card' && S.selectedCardId===id; };
+    var sidebarCards = S.cards.map(function(c){ var cc=themeColors(c.theme), m=metrics(c); return {
+      nickname:c.nickname, debtFmt:fmt(m.debt), id:c.id,
+      dotStyle:{width:'12px',height:'12px',borderRadius:'4px',flex:'none',background:'linear-gradient(135deg,'+cc[0]+','+cc[1]+')'},
+      rowStyle:{display:'flex',alignItems:'center',gap:'10px',padding:'9px 11px',border:'none',borderRadius:'13px',cursor:'pointer',background:activeSide(c.id)?'rgba(255,255,255,.7)':'transparent',boxShadow:activeSide(c.id)?'0 4px 14px rgba(80,70,160,.12)':'none'}
+    }; });
+
+    var navHomeStyle={display:'flex',alignItems:'center',gap:'10px',padding:'11px 15px',border:'none',borderRadius:'14px',cursor:'pointer',fontWeight:700,fontSize:'13px',background:S.view==='dashboard'?'rgba(255,255,255,.6)':'transparent',color:S.view==='dashboard'?'#4a3fd0':'#6b6788',boxShadow:S.view==='dashboard'?'0 4px 14px rgba(80,70,160,.1)':'none'};
+    var navDebtsStyle={display:'flex',alignItems:'center',gap:'10px',padding:'11px 15px',border:'none',borderRadius:'14px',cursor:'pointer',fontWeight:700,fontSize:'13px',background:S.view==='debts'?'rgba(255,255,255,.6)':'transparent',color:S.view==='debts'?'#4a3fd0':'#6b6788',boxShadow:S.view==='debts'?'0 4px 14px rgba(80,70,160,.1)':'none'};
+
+    var dashCards = S.cards.map(function(c){ var m=metrics(c); return {
+      id:c.id, nickname:c.nickname, holder:c.holder, expiry:c.expiry,
+      isVisa:c.brand==='visa', isMaster:c.brand==='mastercard',
+      numberMasked:'•••• •••• •••• '+c.last4,
+      debtFmt:fmt(m.debt), availFmt:fmt(m.avail), limitFmt:fmt(m.limit),
+      usedLabel:Math.round(m.pct*100)+'%',
+      bgStyle:bgStyle(c.theme), cardBoxStyle:cardBox(180),
+      outerStyle:{background:'rgba(255,255,255,.55)',borderRadius:'26px',padding:'12px',border:'1px solid rgba(255,255,255,.7)',boxShadow:'0 8px 30px rgba(80,70,160,.1)'},
+      barStyle:{height:'100%',width:Math.max(3,m.pct*100)+'%',borderRadius:'20px',background:'var(--grad)'}
+    }; });
+
+    var cardsWrapStyle = layout==='list'
+      ? {display:'flex',flexDirection:'column',gap:'16px'}
+      : {display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:'18px'};
+    var dashGridCols = layout==='list' ? 'minmax(0,1.3fr) minmax(320px,1fr)' : 'minmax(0,1.6fr) minmax(320px,380px)';
+
+    var catMap={};
+    S.purchases.forEach(function(p){ var tot=p.amount*rate(p.currency); catMap[p.category]=(catMap[p.category]||0)+tot; });
+    var catEntries=Object.keys(catMap).map(function(k){ return {name:k,amt:catMap[k],color:catColor(k)}; }).sort(function(a,b){ return b.amt-a.amt; });
+    var totalSpend=catEntries.reduce(function(s,e){ return s+e.amt; },0);
+    var acc=0; var stops=[];
+    catEntries.forEach(function(e){ var start=totalSpend>0?acc/totalSpend*360:0; acc+=e.amt; var end=totalSpend>0?acc/totalSpend*360:0; stops.push(e.color+' '+start+'deg '+end+'deg'); });
+    var donutStyle={position:'relative',width:'168px',height:'168px',borderRadius:'50%',background:catEntries.length?'conic-gradient('+stops.join(',')+')':'#eee',boxShadow:'0 8px 24px rgba(80,70,160,.15)'};
+    var categories=catEntries.map(function(e){ return {
+      name:e.name, amountFmt:fmt(e.amt), pctLabel:totalSpend>0?Math.round(e.amt/totalSpend*100)+'%':'0%',
+      dotStyle:{width:'12px',height:'12px',borderRadius:'4px',flex:'none',background:e.color},
+      barStyle:{height:'100%',width:(totalSpend>0?Math.max(3,e.amt/totalSpend*100):0)+'%',borderRadius:'20px',background:e.color}
+    }; });
+
+    var cardName=function(id){ var c=S.cards.find(function(x){return x.id===id;}); return c?c.nickname:'—'; };
+    var recent=S.purchases.slice().sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); }).slice(0,5).map(function(p){ return {
+      merchant:p.merchant, sub:cardName(p.cardId)+' · '+fmtDate(p.date), arsFmt:fmt(p.amount*rate(p.currency)), origFmt:fmtCur(p.amount,p.currency),
+      dotStyle:{width:'10px',height:'10px',borderRadius:'3px',flex:'none',background:catColor(p.category)}
+    }; });
+
+    // detail
+    var dCard=null, dPurchases=[];
+    var sel=S.cards.find(function(c){return c.id===S.selectedCardId;});
+    if(sel){ var m=metrics(sel);
+      var ps=S.purchases.filter(function(p){return p.cardId===sel.id;});
+      dCard={ id:sel.id, nickname:sel.nickname, holder:sel.holder, expiry:sel.expiry,
+        isVisa:sel.brand==='visa', isMaster:sel.brand==='mastercard',
+        numberMasked:'•••• •••• •••• '+sel.last4,
+        limitFmt:fmt(m.limit), debtFmt:fmt(m.debt), availFmt:fmt(m.avail), usedLabel:Math.round(m.pct*100)+'%',
+        bgStyle:bgStyle(sel.theme), cardBoxStyle:cardBox(210),
+        barStyle:{height:'100%',width:Math.max(3,m.pct*100)+'%',borderRadius:'20px',background:'var(--grad)'},
+        hasPurchases:ps.length>0, noPurchases:ps.length===0, hasDebt:m.debt>0.5
+      };
+      dPurchases=ps.map(function(p){ var tot=p.amount*rate(p.currency); var per=tot/p.installments; var rem=tot*(p.installments-p.paidInstallments)/p.installments;
+        var showDots=p.installments<=14;
+        var dots=[]; for(var i=0;i<p.installments;i++){ var paid=i<p.paidInstallments; var isNext=i===p.paidInstallments;
+          dots.push({ mark:paid?'✓':'', style:{width:'24px',height:'24px',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',fontWeight:700,color:paid?'#fff':'#b7b3cc',background:paid?'#1c1c22':'transparent',border:paid?'2px solid #1c1c22':(isNext?'2px solid '+accent:'2px solid rgba(0,0,0,.18)')} });
+        }
+        var canPay=p.paidInstallments<p.installments, canUnpay=p.paidInstallments>0;
+        return { id:p.id, merchant:p.merchant, sub:p.category+' · '+fmtDate(p.date)+' · '+fmtCur(per,'ARS')+'/cuota',
+          arsFmt:fmt(tot), origFmt:fmtCur(p.amount,p.currency),
+          installLabel:p.paidInstallments+'/'+p.installments+' cuotas', remainingFmt:fmt(rem),
+          showDots:showDots, dots:dots,
+          progStyle:{height:'100%',width:Math.max(3,p.paidInstallments/p.installments*100)+'%',borderRadius:'20px',background:'var(--grad)'},
+          dotStyle:{width:'34px',height:'34px',borderRadius:'11px',flex:'none',background:hexA(catColor(p.category),.16),display:'flex',alignItems:'center',justifyContent:'center'},
+          payStyle:{border:'none',background:canPay?'#1c1c22':'rgba(0,0,0,.08)',color:canPay?'#fff':'#b7b3cc',fontWeight:700,fontSize:'11.5px',padding:'7px 12px',borderRadius:'10px',cursor:canPay?'pointer':'default'},
+          unpayStyle:{border:'1px solid rgba(0,0,0,.12)',background:'transparent',color:canUnpay?'#6b6788':'#c9c5db',fontWeight:700,fontSize:'11.5px',padding:'7px 11px',borderRadius:'10px',cursor:canUnpay?'pointer':'default'}
+        };
+      });
+    }
+
+    // forms
+    var inputStyle={width:'100%',padding:'11px 13px',border:'1px solid rgba(120,110,180,.22)',borderRadius:'13px',fontSize:'14px',fontWeight:600,color:'#26233a',background:'rgba(255,255,255,.7)',outline:'none',marginBottom:'12px'};
+    var labelStyle={display:'block',fontSize:'11.5px',fontWeight:700,color:'#6b6788',margin:'2px 0 6px',letterSpacing:'.01em'};
+    var f=S.form;
+    var brandBtn=function(on){ return {flex:'1',padding:'11px',borderRadius:'13px',fontWeight:800,fontSize:'13px',cursor:'pointer',border:on?'2px solid '+accent:'1px solid rgba(120,110,180,.22)',background:on?hexA(accent,.1):'rgba(255,255,255,.6)',color:on?accent:'#6b6788'}; };
+    var cf={ nickname:f.nickname, holder:f.holder, last4:f.last4, expiry:f.expiry, limit:f.limit, limitCurrency:f.limitCurrency,
+      brandVisaStyle:brandBtn(f.brand==='visa'), brandMasterStyle:brandBtn(f.brand==='mastercard') };
+    var themeSwatches=THEMES.map(function(t){ var cc=themeColors(t); return {
+      theme:t, style:{width:'40px',height:'40px',borderRadius:'12px',cursor:'pointer',background:'linear-gradient(135deg,'+cc[0]+','+cc[1]+')',border:f.theme===t?'3px solid #26233a':'3px solid transparent',boxShadow:'0 4px 10px rgba(0,0,0,.12)'}
+    }; });
+
+    var pf=S.pform;
+    var cardOptions=S.cards.map(function(c){ return {id:c.id,label:c.nickname+' ···'+c.last4}; });
+    var pConvertPreview=fmt((parseFloat(pf.amount)||0)*rate(pf.currency));
+
+    var rf={ usd:String(S.rates.USD), eur:String(S.rates.EUR) };
+
+    // personal debts
+    var debts = S.debts || [];
+    var debtsTotal=0;
+    debts.forEach(function(d){ var tot=d.amount*rate(d.currency); debtsTotal += tot*(d.installments-d.paidInstallments)/(d.installments||1); });
+    var debtsList = debts.map(function(d){ var tot=d.amount*rate(d.currency); var rem=tot*(d.installments-d.paidInstallments)/d.installments;
+      var showDots=d.installments<=14; var dots=[];
+      for(var i=0;i<d.installments;i++){ var paid=i<d.paidInstallments; var isNext=i===d.paidInstallments;
+        dots.push({ mark:paid?'✓':'', style:{width:'24px',height:'24px',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'12px',fontWeight:700,color:paid?'#fff':'#b7b3cc',background:paid?'#1c1c22':'transparent',border:paid?'2px solid #1c1c22':(isNext?'2px solid '+accent:'2px solid rgba(0,0,0,.18)')} });
+      }
+      var canPay=d.paidInstallments<d.installments, canUnpay=d.paidInstallments>0;
+      return { id:d.id, creditor:d.creditor, sub:(d.note?d.note+' · ':'')+d.paidInstallments+'/'+d.installments+' cuotas',
+        arsFmt:fmt(tot), origFmt:fmtCur(d.amount,d.currency),
+        installLabel:d.paidInstallments+'/'+d.installments+' cuotas', remainingFmt:fmt(rem),
+        showDots:showDots, dots:dots,
+        progStyle:{height:'100%',width:Math.max(3,d.paidInstallments/d.installments*100)+'%',borderRadius:'20px',background:'var(--grad)'},
+        payStyle:{border:'none',background:canPay?'#1c1c22':'rgba(0,0,0,.08)',color:canPay?'#fff':'#b7b3cc',fontWeight:700,fontSize:'11.5px',padding:'7px 12px',borderRadius:'10px',cursor:canPay?'pointer':'default'},
+        unpayStyle:{border:'1px solid rgba(0,0,0,.12)',background:'transparent',color:canUnpay?'#6b6788':'#c9c5db',fontWeight:700,fontSize:'11.5px',padding:'7px 11px',borderRadius:'10px',cursor:canUnpay?'pointer':'default'}
+      };
+    });
+    var dfrm=S.dform||emptyDebtForm();
+    var dConvertPreview=fmt((parseFloat(dfrm.amount)||0)*rate(dfrm.currency));
+
+    return {
+      rootStyle:rootStyle, showBlobs:showBlobs,
+      isDashboard:S.view==='dashboard', isCard:S.view==='card' && !!sel, isDebts:S.view==='debts',
+      navHomeStyle:navHomeStyle, navDebtsStyle:navDebtsStyle, sidebarCards:sidebarCards,
+      totalDebtFmt:fmt(tDebt), totalLimitFmt:fmt(tLimit), totalAvailFmt:fmt(tAvail),
+      cardsCount:S.cards.length, purchasesCount:S.purchases.length,
+      dashCards:dashCards, cardsWrapStyle:cardsWrapStyle, dashGridCols:dashGridCols,
+      categories:categories, donutStyle:donutStyle, hasSpend:catEntries.length>0, noSpend:catEntries.length===0, totalSpendShort:fmtShort(totalSpend),
+      recent:recent,
+      dCard:dCard||{}, dPurchases:dPurchases,
+      anyModal:!!S.modal, modalCard:S.modal==='card', modalPurchase:S.modal==='purchase', modalSettings:S.modal==='settings', modalDebt:S.modal==='debt',
+      inputStyle:inputStyle, labelStyle:labelStyle, cf:cf, themeSwatches:themeSwatches,
+      pf:pf, cardOptions:cardOptions, categoryOptions:CATEGORIES, pConvertPreview:pConvertPreview,
+      hasCards:S.cards.length>0, noCards:S.cards.length===0,
+      rf:rf, df:dfrm, dConvertPreview:dConvertPreview,
+      debtsList:debtsList, debtsTotalFmt:fmt(debtsTotal), debtsCount:debts.length,
+      hasDebts:debts.length>0, noDebts:debts.length===0
+    };
+  }
+
+  // ============================ HTML BUILDERS ============================
+  function inp(store, field, val, extra){
+    extra = extra || {};
+    var attrs = 'data-store="'+store+'" data-field="'+field+'"';
+    if(extra.sanit) attrs += ' data-sanit="'+extra.sanit+'"';
+    if(extra.placeholder) attrs += ' placeholder="'+esc(extra.placeholder)+'"';
+    if(extra.maxlength) attrs += ' maxlength="'+extra.maxlength+'"';
+    if(extra.inputmode) attrs += ' inputmode="'+extra.inputmode+'"';
+    if(extra.type) attrs += ' type="'+extra.type+'"';
+    return '<input '+attrs+' value="'+esc(val)+'" style="'+css(V.inputStyle)+'">';
+  }
+  function sel(store, field, val, options){
+    var opts = options.map(function(o){ return '<option value="'+esc(o.value)+'"'+(String(o.value)===String(val)?' selected':'')+'>'+esc(o.label)+'</option>'; }).join('');
+    return '<select data-store="'+store+'" data-field="'+field+'" style="'+css(V.inputStyle)+'">'+opts+'</select>';
+  }
+  function label(t){ return '<label style="'+css(V.labelStyle)+'">'+esc(t)+'</label>'; }
+
+  var V; // current view-model (set each render)
+
+  function sidebarHTML(){
+    var badge = V.debtsCount ? '<span style="margin-left:auto;background:rgba(109,94,246,.14);color:#6d5ef6;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:20px">'+V.debtsCount+'</span>' : '';
+    var cards = V.sidebarCards.map(function(c){
+      return '<button data-act="openCard" data-id="'+c.id+'" style="'+css(c.rowStyle)+'">'+
+        '<span style="'+css(c.dotStyle)+'"></span>'+
+        '<span style="flex:1;text-align:left;min-width:0">'+
+          '<span style="display:block;font-weight:700;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(c.nickname)+'</span>'+
+          '<span style="display:block;font-size:11px;color:#8a86a6;font-weight:500">'+esc(c.debtFmt)+'</span>'+
+        '</span></button>';
+    }).join('');
+    return '<aside class="tj-side" style="display:flex;flex-direction:column;gap:14px;padding:22px 18px;height:100vh;position:sticky;top:0">'+
+      '<div style="display:flex;align-items:center;gap:11px;padding:4px 6px 8px">'+
+        '<div style="width:38px;height:38px;border-radius:12px;background:var(--grad);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(109,94,246,.4)"><div style="width:15px;height:11px;border-radius:3px;border:2px solid #fff"></div></div>'+
+        '<div><div style="font-weight:800;font-size:16px;letter-spacing:-.02em">Tarjetero</div><div style="font-size:10.5px;color:#8a86a6;font-weight:500;letter-spacing:.04em">FINANZAS · PREMIUM</div></div>'+
+      '</div>'+
+      '<button data-act="addPurchase" style="display:flex;align-items:center;gap:10px;padding:13px 15px;border:none;border-radius:16px;background:var(--grad);color:#fff;font-weight:700;font-size:13.5px;cursor:pointer;box-shadow:0 10px 24px rgba(109,94,246,.38)"><span style="width:22px;height:22px;border-radius:8px;background:rgba(255,255,255,.25);display:inline-flex;align-items:center;justify-content:center;font-size:16px;font-weight:400;line-height:1">+</span> Cargar compra</button>'+
+      '<button data-act="goHome" style="'+css(V.navHomeStyle)+'"><span style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center">◧</span> Inicio</button>'+
+      '<button data-act="goDebts" style="'+css(V.navDebtsStyle)+'"><span style="width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center">🤝</span> Deudas personales'+badge+'</button>'+
+      '<div style="margin-top:6px;padding:0 8px;font-size:10.5px;font-weight:700;letter-spacing:.08em;color:#9a96b6;text-transform:uppercase">Mis tarjetas</div>'+
+      '<div class="tj-sidecards" style="display:flex;flex-direction:column;gap:6px;overflow-y:auto;flex:1;padding-right:2px">'+cards+'</div>'+
+      '<button data-act="addCard" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border:1.5px dashed rgba(109,94,246,.4);border-radius:14px;background:rgba(255,255,255,.35);color:#6d5ef6;font-weight:700;font-size:12.5px;cursor:pointer">+ Nueva tarjeta</button>'+
+      '<button data-act="openSettings" style="display:flex;align-items:center;gap:10px;padding:11px 15px;border:none;border-radius:14px;background:transparent;color:#6b6788;font-weight:600;font-size:12.5px;cursor:pointer">⚙ Ajustes · Tipo de cambio</button>'+
+    '</aside>';
+  }
+
+  function statTile(title, value, valColor){
+    return '<div style="padding:20px 22px;border-radius:22px;'+GLASS+'"><div style="font-size:12px;color:#8a86a6;font-weight:600;margin-bottom:8px">'+esc(title)+'</div><div style="font-size:23px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums'+(valColor?';color:'+valColor:'')+'">'+value+'</div></div>';
+  }
+
+  function dashCardHTML(c){
+    return '<div style="'+css(c.outerStyle)+'">'+
+      '<div data-act="openCard" data-id="'+c.id+'" style="'+css(c.cardBoxStyle)+'">'+
+        '<div style="'+css(c.bgStyle)+'"></div>'+
+        '<div style="'+CARD_HALO+'"></div>'+
+        '<div style="position:relative;z-index:2;display:flex;flex-direction:column;height:100%;justify-content:space-between;color:#fff">'+
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+            '<div><div style="font-size:11px;opacity:.85;font-weight:600;letter-spacing:.03em">'+esc(c.nickname)+'</div><div style="font-size:10.5px;opacity:.7;font-weight:500;margin-top:1px">Venc. '+esc(c.expiry)+'</div></div>'+
+            brandMark(c,19)+
+          '</div>'+
+          '<div><div style="font-size:15px;font-weight:600;letter-spacing:.14em;font-variant-numeric:tabular-nums;margin-bottom:9px">'+c.numberMasked+'</div>'+
+            '<div style="display:flex;justify-content:space-between;align-items:flex-end"><div><div style="font-size:9px;opacity:.7;letter-spacing:.1em;text-transform:uppercase">Titular</div><div style="font-size:12.5px;font-weight:700;letter-spacing:.02em">'+esc(c.holder)+'</div></div></div>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px 4px">'+
+        '<div><div style="font-size:11px;color:#8a86a6;font-weight:600">Deuda</div><div style="font-size:15px;font-weight:800;color:#4a3fd0;font-variant-numeric:tabular-nums">'+esc(c.debtFmt)+'</div></div>'+
+        '<div style="text-align:right"><div style="font-size:11px;color:#8a86a6;font-weight:600">Disponible</div><div style="font-size:15px;font-weight:800;color:#2f9e6f;font-variant-numeric:tabular-nums">'+esc(c.availFmt)+'</div></div>'+
+      '</div>'+
+      '<div style="padding:6px 14px 4px">'+
+        '<div style="height:7px;border-radius:20px;background:rgba(109,94,246,.14);overflow:hidden"><div style="'+css(c.barStyle)+'"></div></div>'+
+        '<div style="display:flex;justify-content:space-between;margin-top:6px"><span style="font-size:10.5px;color:#8a86a6;font-weight:600">'+esc(c.usedLabel)+' usado</span>'+
+        '<button data-act="deleteCard" data-id="'+c.id+'" style="border:none;background:none;color:#c86;font-size:10.5px;font-weight:700;cursor:pointer;padding:0">Eliminar</button></div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function dashboardHTML(){
+    var stats = statTile('Límite total', esc(V.totalLimitFmt)) +
+      statTile('Disponible total', esc(V.totalAvailFmt), '#2f9e6f') +
+      '<div style="padding:20px 22px;border-radius:22px;'+GLASS+'"><div style="font-size:12px;color:#8a86a6;font-weight:600;margin-bottom:8px">Tarjetas · Compras activas</div><div style="font-size:23px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums">'+V.cardsCount+' · '+V.purchasesCount+'</div></div>';
+
+    var cards = V.dashCards.map(dashCardHTML).join('');
+
+    var chart;
+    if(V.hasSpend){
+      var cats = V.categories.map(function(cat){
+        return '<div><div style="display:flex;align-items:center;gap:9px;margin-bottom:5px"><span style="'+css(cat.dotStyle)+'"></span><span style="font-size:12.5px;font-weight:700;flex:1">'+esc(cat.name)+'</span><span style="font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums">'+esc(cat.amountFmt)+'</span><span style="font-size:11px;color:#8a86a6;font-weight:600;width:38px;text-align:right">'+esc(cat.pctLabel)+'</span></div><div style="height:6px;border-radius:20px;background:rgba(0,0,0,.05);overflow:hidden"><div style="'+css(cat.barStyle)+'"></div></div></div>';
+      }).join('');
+      chart = '<div style="display:flex;justify-content:center;margin:6px 0 18px"><div style="'+css(V.donutStyle)+'"><div style="position:absolute;inset:22px;border-radius:50%;background:rgba(255,255,255,.9);display:flex;flex-direction:column;align-items:center;justify-content:center"><div style="font-size:10px;color:#8a86a6;font-weight:600">Total</div><div style="font-size:16px;font-weight:800;letter-spacing:-.02em;color:#4a3fd0;font-variant-numeric:tabular-nums">'+esc(V.totalSpendShort)+'</div></div></div></div><div style="display:flex;flex-direction:column;gap:11px">'+cats+'</div>';
+    } else {
+      chart = '<div style="text-align:center;padding:30px 10px;color:#9a96b6;font-size:13px;font-weight:600">Cargá compras para ver el desglose.</div>';
+    }
+
+    var recents = V.recent.map(function(r){
+      return '<div style="display:flex;align-items:center;gap:12px;padding:9px 6px;border-radius:12px"><span style="'+css(r.dotStyle)+'"></span><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(r.merchant)+'</div><div style="font-size:11px;color:#8a86a6;font-weight:600">'+esc(r.sub)+'</div></div><div style="text-align:right"><div style="font-size:13px;font-weight:800;font-variant-numeric:tabular-nums">'+esc(r.arsFmt)+'</div><div style="font-size:10.5px;color:#8a86a6;font-weight:600">'+esc(r.origFmt)+'</div></div></div>';
+    }).join('');
+
+    return '<div class="tj-pop">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;margin-bottom:24px">'+
+        '<div><div style="font-size:12.5px;color:#8a86a6;font-weight:600;letter-spacing:.02em">Resumen general</div><h1 style="margin:2px 0 0;font-size:30px;font-weight:800;letter-spacing:-.03em">Hola, Alexandra 👋</h1></div>'+
+        '<div style="text-align:right"><div style="font-size:11.5px;color:#8a86a6;font-weight:600">Deuda total (ARS)</div><div style="font-size:30px;font-weight:800;letter-spacing:-.02em;color:#4a3fd0;font-variant-numeric:tabular-nums">'+esc(V.totalDebtFmt)+'</div></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-bottom:28px">'+stats+'</div>'+
+      '<div style="display:grid;grid-template-columns:'+V.dashGridCols+';gap:24px;align-items:start">'+
+        '<div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2 style="margin:0;font-size:17px;font-weight:800;letter-spacing:-.02em">Tarjetas</h2><button data-act="addCard" style="border:none;background:rgba(109,94,246,.1);color:#6d5ef6;font-weight:700;font-size:12px;padding:7px 13px;border-radius:11px;cursor:pointer">+ Agregar</button></div><div style="'+css(V.cardsWrapStyle)+'">'+cards+'</div></div>'+
+        '<div style="display:flex;flex-direction:column;gap:20px">'+
+          '<div style="padding:22px;border-radius:24px;'+GLASS+'"><h2 style="margin:0 0 4px;font-size:16px;font-weight:800;letter-spacing:-.02em">Gastos por categoría</h2><div style="font-size:11.5px;color:#8a86a6;font-weight:600;margin-bottom:16px">Total comprado · en ARS</div>'+chart+'</div>'+
+          '<div style="padding:22px;border-radius:24px;'+GLASS+'"><h2 style="margin:0 0 14px;font-size:16px;font-weight:800;letter-spacing:-.02em">Compras recientes</h2><div style="display:flex;flex-direction:column;gap:4px">'+recents+'</div></div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function purchaseRowHTML(p){
+    var dots = p.showDots ? '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px">'+p.dots.map(function(d){ return '<div style="'+css(d.style)+'">'+d.mark+'</div>'; }).join('')+'</div>' : '';
+    return '<div style="padding:18px 20px;border-radius:20px;background:rgba(255,255,255,.62);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.75);box-shadow:0 6px 22px rgba(80,70,160,.09)">'+
+      '<div style="display:flex;align-items:flex-start;gap:13px;margin-bottom:14px"><span style="'+css(p.dotStyle)+'"></span><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:800;letter-spacing:-.01em">'+esc(p.merchant)+'</div><div style="font-size:11.5px;color:#8a86a6;font-weight:600;margin-top:1px">'+esc(p.sub)+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:800;font-variant-numeric:tabular-nums">'+esc(p.arsFmt)+'</div><div style="font-size:11px;color:#8a86a6;font-weight:600">'+esc(p.origFmt)+'</div></div></div>'+
+      dots+
+      '<div style="height:6px;border-radius:20px;background:rgba(0,0,0,.06);overflow:hidden;margin-bottom:12px"><div style="'+css(p.progStyle)+'"></div></div>'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div style="font-size:11.5px;color:#6b6788;font-weight:700">'+esc(p.installLabel)+' · <span style="color:#8a86a6;font-weight:600">resta '+esc(p.remainingFmt)+'</span></div>'+
+        '<div style="display:flex;gap:8px">'+
+          '<button data-act="payDelta" data-id="'+p.id+'" data-d="-1" style="'+css(p.unpayStyle)+'">− Cuota</button>'+
+          '<button data-act="payDelta" data-id="'+p.id+'" data-d="1" style="'+css(p.payStyle)+'">Pagar cuota ✓</button>'+
+          '<button data-act="deletePurchase" data-id="'+p.id+'" style="border:none;background:rgba(214,69,90,.08);color:#d6455a;font-weight:700;font-size:11.5px;padding:7px 11px;border-radius:10px;cursor:pointer">Eliminar</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function cardDetailHTML(){
+    var d=V.dCard;
+    var payAll = d.hasDebt ? '<button data-act="payAll" data-id="'+d.id+'" style="display:flex;align-items:center;justify-content:center;gap:8px;border:none;background:#1c1c22;color:#fff;font-weight:800;font-size:13.5px;padding:13px;border-radius:15px;cursor:pointer;box-shadow:0 10px 24px rgba(28,28,34,.28)">✓ Pagar tarjeta · '+esc(d.debtFmt)+'</button>' : '';
+    var purchases;
+    if(d.hasPurchases){
+      purchases = '<div style="display:flex;flex-direction:column;gap:14px">'+V.dPurchases.map(purchaseRowHTML).join('')+'</div>';
+    } else {
+      purchases = '<div style="text-align:center;padding:50px 20px;border-radius:20px;background:rgba(255,255,255,.5);border:1px dashed rgba(109,94,246,.3);color:#9a96b6;font-size:14px;font-weight:600">Todavía no hay compras en esta tarjeta.<br>Tocá <b style="color:#6d5ef6">+ Cargar compra</b> para empezar.</div>';
+    }
+    return '<div class="tj-pop">'+
+      '<button data-act="goHome" style="display:inline-flex;align-items:center;gap:7px;border:none;background:rgba(255,255,255,.5);color:#4a3fd0;font-weight:700;font-size:12.5px;padding:8px 14px;border-radius:12px;cursor:pointer;margin-bottom:20px">← Volver al inicio</button>'+
+      '<div style="display:grid;grid-template-columns:minmax(0,340px) 1fr;gap:28px;align-items:start">'+
+        '<div style="display:flex;flex-direction:column;gap:18px;position:sticky;top:20px">'+
+          '<div style="'+css(d.cardBoxStyle)+'"><div style="'+css(d.bgStyle)+'"></div><div style="position:absolute;top:-30px;right:-20px;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.28),transparent 70%);pointer-events:none"></div>'+
+            '<div style="position:relative;z-index:2;display:flex;flex-direction:column;height:100%;justify-content:space-between;color:#fff">'+
+              '<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div style="font-size:12px;opacity:.85;font-weight:600">'+esc(d.nickname)+'</div><div style="font-size:11px;opacity:.7;font-weight:500;margin-top:2px">Venc. '+esc(d.expiry)+'</div></div>'+brandMark(d,23)+'</div>'+
+              '<div><div style="font-size:18px;font-weight:600;letter-spacing:.16em;font-variant-numeric:tabular-nums;margin-bottom:12px">'+d.numberMasked+'</div><div style="font-size:9px;opacity:.7;letter-spacing:.1em;text-transform:uppercase">Titular</div><div style="font-size:14px;font-weight:700;letter-spacing:.02em">'+esc(d.holder)+'</div></div>'+
+            '</div>'+
+          '</div>'+
+          '<div style="padding:18px 20px;border-radius:22px;background:rgba(255,255,255,.6);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,.75);box-shadow:0 8px 30px rgba(80,70,160,.1)">'+
+            '<div style="display:flex;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;color:#8a86a6;font-weight:600">Límite</span><span style="font-size:13.5px;font-weight:800;font-variant-numeric:tabular-nums">'+esc(d.limitFmt)+'</span></div>'+
+            '<div style="display:flex;justify-content:space-between;margin-bottom:12px"><span style="font-size:12px;color:#8a86a6;font-weight:600">Deuda</span><span style="font-size:13.5px;font-weight:800;color:#4a3fd0;font-variant-numeric:tabular-nums">'+esc(d.debtFmt)+'</span></div>'+
+            '<div style="display:flex;justify-content:space-between;margin-bottom:14px"><span style="font-size:12px;color:#8a86a6;font-weight:600">Disponible</span><span style="font-size:13.5px;font-weight:800;color:#2f9e6f;font-variant-numeric:tabular-nums">'+esc(d.availFmt)+'</span></div>'+
+            '<div style="height:8px;border-radius:20px;background:rgba(109,94,246,.14);overflow:hidden"><div style="'+css(d.barStyle)+'"></div></div>'+
+            '<div style="text-align:right;font-size:11px;color:#8a86a6;font-weight:600;margin-top:6px">'+esc(d.usedLabel)+' del límite usado</div>'+
+          '</div>'+
+          payAll+
+          '<button data-act="deleteCard" data-id="'+d.id+'" style="border:1px solid rgba(214,69,90,.3);background:rgba(214,69,90,.06);color:#d6455a;font-weight:700;font-size:12.5px;padding:11px;border-radius:14px;cursor:pointer">Eliminar tarjeta</button>'+
+        '</div>'+
+        '<div>'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h2 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-.02em">Compras · '+esc(d.nickname)+'</h2><button data-act="addPurchase" style="border:none;background:var(--grad);color:#fff;font-weight:700;font-size:12.5px;padding:10px 16px;border-radius:13px;cursor:pointer;box-shadow:0 8px 18px rgba(109,94,246,.32)">+ Cargar compra</button></div>'+
+          purchases+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function debtRowHTML(d){
+    var dots = d.showDots ? '<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px">'+d.dots.map(function(x){ return '<div style="'+css(x.style)+'">'+x.mark+'</div>'; }).join('')+'</div>' : '';
+    return '<div style="padding:20px;border-radius:22px;background:rgba(255,255,255,.62);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.75);box-shadow:0 6px 22px rgba(80,70,160,.09)">'+
+      '<div style="display:flex;align-items:flex-start;gap:13px;margin-bottom:14px"><span style="width:40px;height:40px;border-radius:13px;flex:none;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:18px">🤝</span><div style="flex:1;min-width:0"><div style="font-size:15.5px;font-weight:800;letter-spacing:-.01em">'+esc(d.creditor)+'</div><div style="font-size:11.5px;color:#8a86a6;font-weight:600;margin-top:1px">'+esc(d.sub)+'</div></div><div style="text-align:right"><div style="font-size:16px;font-weight:800;font-variant-numeric:tabular-nums">'+esc(d.arsFmt)+'</div><div style="font-size:11px;color:#8a86a6;font-weight:600">'+esc(d.origFmt)+'</div></div></div>'+
+      dots+
+      '<div style="height:6px;border-radius:20px;background:rgba(0,0,0,.06);overflow:hidden;margin-bottom:12px"><div style="'+css(d.progStyle)+'"></div></div>'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div style="font-size:11.5px;color:#6b6788;font-weight:700">'+esc(d.installLabel)+' · <span style="color:#8a86a6;font-weight:600">resta '+esc(d.remainingFmt)+'</span></div>'+
+        '<div style="display:flex;gap:8px">'+
+          '<button data-act="payDebtDelta" data-id="'+d.id+'" data-d="-1" style="'+css(d.unpayStyle)+'">− Cuota</button>'+
+          '<button data-act="payDebtDelta" data-id="'+d.id+'" data-d="1" style="'+css(d.payStyle)+'">Pagar cuota ✓</button>'+
+          '<button data-act="deleteDebt" data-id="'+d.id+'" style="border:none;background:rgba(214,69,90,.08);color:#d6455a;font-weight:700;font-size:11.5px;padding:7px 11px;border-radius:10px;cursor:pointer">Eliminar</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function debtsHTML(){
+    var body;
+    if(V.hasDebts){
+      body = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;max-width:1040px">'+V.debtsList.map(debtRowHTML).join('')+'</div>';
+    } else {
+      body = '<div style="text-align:center;padding:56px 20px;border-radius:22px;background:rgba(255,255,255,.5);border:1px dashed rgba(109,94,246,.3);color:#9a96b6;font-size:14px;font-weight:600;max-width:640px">Todavía no registraste ninguna deuda personal.<br>Tocá <b style="color:#6d5ef6">+ Agregar deuda</b> para empezar.</div>';
+    }
+    return '<div class="tj-pop">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;margin-bottom:8px"><div><div style="font-size:12.5px;color:#8a86a6;font-weight:600;letter-spacing:.02em">Registro independiente</div><h1 style="margin:2px 0 0;font-size:28px;font-weight:800;letter-spacing:-.03em">Deudas personales</h1></div><button data-act="addDebt" style="border:none;background:var(--grad);color:#fff;font-weight:700;font-size:12.5px;padding:11px 17px;border-radius:13px;cursor:pointer;box-shadow:0 8px 18px rgba(109,94,246,.32)">+ Agregar deuda</button></div>'+
+      '<div style="font-size:12.5px;color:#8a86a6;font-weight:600;max-width:560px;margin-bottom:22px">Préstamos y deudas de palabra que no pertenecen a ninguna tarjeta (ej: un préstamo de un familiar). No afectan el límite ni las métricas de tus tarjetas.</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:26px;max-width:640px">'+
+        statTile('Total adeudado (ARS)', esc(V.debtsTotalFmt), '#4a3fd0').replace('font-size:23px','font-size:24px')+
+        statTile('Deudas activas', V.debtsCount).replace('font-size:23px','font-size:24px')+
+      '</div>'+
+      body+
+    '</div>';
+  }
+
+  function modalsHTML(){
+    if(!V.anyModal) return '';
+    var inner='';
+    if(V.modalCard){
+      var swatches = V.themeSwatches.map(function(s){ return '<button data-act="selectTheme" data-theme="'+s.theme+'" style="'+css(s.style)+'"></button>'; }).join('');
+      inner = '<div data-stop class="tj-pop" style="width:440px;max-width:100%;max-height:90vh;overflow-y:auto;padding:26px;border-radius:26px;background:rgba(255,255,255,.85);backdrop-filter:blur(30px) saturate(1.6);-webkit-backdrop-filter:blur(30px) saturate(1.6);border:1px solid rgba(255,255,255,.9);box-shadow:0 30px 80px rgba(60,50,120,.28)">'+
+        modalHeader('Nueva tarjeta')+
+        label('Nombre / alias de la tarjeta')+inp('form','nickname',V.cf.nickname,{placeholder:'Ej: Santander Visa'})+
+        label('Titular')+inp('form','holder',V.cf.holder,{placeholder:'Ej: Alexandra Vaise'})+
+        '<div style="display:flex;gap:12px"><div style="flex:1">'+label('Últimos 4 dígitos')+inp('form','last4',V.cf.last4,{placeholder:'1099',maxlength:'4',sanit:'digits4'})+'</div><div style="flex:1">'+label('Vencimiento')+inp('form','expiry',V.cf.expiry,{placeholder:'08/27'})+'</div></div>'+
+        label('Marca')+
+        '<div style="display:flex;gap:10px;margin-bottom:4px"><button data-act="brandVisa" style="'+css(V.cf.brandVisaStyle)+'">VISA</button><button data-act="brandMaster" style="'+css(V.cf.brandMasterStyle)+'">Mastercard</button></div>'+
+        '<div style="display:flex;gap:12px;margin-top:8px"><div style="flex:1.4">'+label('Límite')+inp('form','limit',V.cf.limit,{placeholder:'800000',inputmode:'numeric',sanit:'num'})+'</div><div style="flex:1">'+label('Moneda del límite')+sel('form','limitCurrency',V.cf.limitCurrency,[{value:'ARS',label:'ARS $'},{value:'USD',label:'USD'},{value:'EUR',label:'EUR'}])+'</div></div>'+
+        label('Color')+
+        '<div style="display:flex;gap:10px;margin-bottom:20px">'+swatches+'</div>'+
+        '<button data-act="submitCard" style="width:100%;padding:14px;border:none;border-radius:15px;background:var(--grad);color:#fff;font-weight:800;font-size:14.5px;cursor:pointer;box-shadow:0 12px 26px rgba(109,94,246,.36)">Crear tarjeta</button>'+
+      '</div>';
+    } else if(V.modalPurchase){
+      var pbody;
+      if(V.hasCards){
+        var cardOpts = V.cardOptions.map(function(o){ return {value:o.id, label:o.label}; });
+        var catOpts = V.categoryOptions.map(function(c){ return {value:c, label:c}; });
+        pbody = '<div>'+
+          label('Tarjeta')+sel('pform','cardId',V.pf.cardId,cardOpts)+
+          label('Comercio / descripción')+inp('pform','merchant',V.pf.merchant,{placeholder:'Ej: Apple Store'})+
+          '<div style="display:flex;gap:12px"><div style="flex:1.5">'+label('Monto')+inp('pform','amount',V.pf.amount,{placeholder:'1200',inputmode:'decimal',sanit:'num'})+'</div><div style="flex:1">'+label('Moneda')+sel('pform','currency',V.pf.currency,[{value:'ARS',label:'ARS $'},{value:'USD',label:'USD'},{value:'EUR',label:'EUR'}])+'</div></div>'+
+          '<div style="font-size:11.5px;color:#6d5ef6;font-weight:700;margin:-6px 0 4px">≈ '+esc(V.pConvertPreview)+' en ARS</div>'+
+          '<div style="display:flex;gap:12px"><div style="flex:1">'+label('Cuotas')+inp('pform','installments',V.pf.installments,{inputmode:'numeric',sanit:'int'})+'</div><div style="flex:1">'+label('Cuotas pagadas')+inp('pform','paidInstallments',V.pf.paidInstallments,{inputmode:'numeric',sanit:'int'})+'</div></div>'+
+          '<div style="display:flex;gap:12px"><div style="flex:1">'+label('Categoría')+sel('pform','category',V.pf.category,catOpts)+'</div><div style="flex:1">'+label('Fecha')+inp('pform','date',V.pf.date,{type:'date'})+'</div></div>'+
+          '<button data-act="submitPurchase" style="width:100%;margin-top:8px;padding:14px;border:none;border-radius:15px;background:var(--grad);color:#fff;font-weight:800;font-size:14.5px;cursor:pointer;box-shadow:0 12px 26px rgba(109,94,246,.36)">Agregar compra</button>'+
+        '</div>';
+      } else {
+        pbody = '<div style="text-align:center;padding:30px 10px;color:#9a96b6;font-weight:600">Primero creá una tarjeta.</div>';
+      }
+      inner = '<div data-stop class="tj-pop" style="width:460px;max-width:100%;max-height:90vh;overflow-y:auto;padding:26px;border-radius:26px;background:rgba(255,255,255,.85);backdrop-filter:blur(30px) saturate(1.6);-webkit-backdrop-filter:blur(30px) saturate(1.6);border:1px solid rgba(255,255,255,.9);box-shadow:0 30px 80px rgba(60,50,120,.28)">'+modalHeader('Cargar compra en cuotas')+pbody+'</div>';
+    } else if(V.modalSettings){
+      inner = '<div data-stop class="tj-pop" style="width:400px;max-width:100%;padding:26px;border-radius:26px;background:rgba(255,255,255,.85);backdrop-filter:blur(30px) saturate(1.6);-webkit-backdrop-filter:blur(30px) saturate(1.6);border:1px solid rgba(255,255,255,.9);box-shadow:0 30px 80px rgba(60,50,120,.28)">'+
+        modalHeader('Tipo de cambio')+
+        '<div style="font-size:12px;color:#8a86a6;font-weight:600;margin-bottom:18px">Todo se convierte a ARS (moneda base).</div>'+
+        label('1 USD equivale a (ARS)')+inp('rates','USD',V.rf.usd,{inputmode:'decimal',sanit:'rate'})+
+        label('1 EUR equivale a (ARS)')+inp('rates','EUR',V.rf.eur,{inputmode:'decimal',sanit:'rate'})+
+        '<button data-act="submitSettings" style="width:100%;margin-top:10px;padding:14px;border:none;border-radius:15px;background:var(--grad);color:#fff;font-weight:800;font-size:14.5px;cursor:pointer;box-shadow:0 12px 26px rgba(109,94,246,.36)">Guardar</button>'+
+      '</div>';
+    } else if(V.modalDebt){
+      inner = '<div data-stop class="tj-pop" style="width:440px;max-width:100%;max-height:90vh;overflow-y:auto;padding:26px;border-radius:26px;background:rgba(255,255,255,.85);backdrop-filter:blur(30px) saturate(1.6);-webkit-backdrop-filter:blur(30px) saturate(1.6);border:1px solid rgba(255,255,255,.9);box-shadow:0 30px 80px rgba(60,50,120,.28)">'+
+        modalHeader('Nueva deuda personal')+
+        '<div style="font-size:12px;color:#8a86a6;font-weight:600;margin-bottom:18px">No pertenece a ninguna tarjeta. Ej: "Mi primo me prestó 1000 en 12 cuotas".</div>'+
+        label('Acreedor / a quién le debés')+inp('dform','creditor',V.df.creditor,{placeholder:'Ej: Mi primo Juan'})+
+        label('Detalle (opcional)')+inp('dform','note',V.df.note,{placeholder:'Ej: Préstamo para la moto'})+
+        '<div style="display:flex;gap:12px"><div style="flex:1.5">'+label('Monto')+inp('dform','amount',V.df.amount,{placeholder:'1000',inputmode:'decimal',sanit:'num'})+'</div><div style="flex:1">'+label('Moneda')+sel('dform','currency',V.df.currency,[{value:'ARS',label:'ARS $'},{value:'USD',label:'USD'},{value:'EUR',label:'EUR'}])+'</div></div>'+
+        '<div style="font-size:11.5px;color:#6d5ef6;font-weight:700;margin:-6px 0 4px">≈ '+esc(V.dConvertPreview)+' en ARS</div>'+
+        '<div style="display:flex;gap:12px"><div style="flex:1">'+label('Cuotas')+inp('dform','installments',V.df.installments,{inputmode:'numeric',sanit:'int'})+'</div><div style="flex:1">'+label('Cuotas pagadas')+inp('dform','paidInstallments',V.df.paidInstallments,{inputmode:'numeric',sanit:'int'})+'</div></div>'+
+        '<button data-act="submitDebt" style="width:100%;margin-top:8px;padding:14px;border:none;border-radius:15px;background:var(--grad);color:#fff;font-weight:800;font-size:14.5px;cursor:pointer;box-shadow:0 12px 26px rgba(109,94,246,.36)">Agregar deuda</button>'+
+      '</div>';
+    }
+    return '<div data-act="closeModal" style="position:fixed;inset:0;z-index:50;background:rgba(60,50,110,.28);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px;animation:fadein .2s both">'+inner+'</div>';
+  }
+  function modalHeader(title){
+    return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px"><h2 style="margin:0;font-size:20px;font-weight:800;letter-spacing:-.02em">'+esc(title)+'</h2><button data-act="closeModal" style="border:none;background:rgba(0,0,0,.05);width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:16px;color:#6b6788">✕</button></div>';
+  }
+
+  function blobsHTML(){
+    if(!V.showBlobs) return '';
+    return '<div style="position:fixed;top:-160px;left:-120px;width:520px;height:520px;border-radius:50%;background:radial-gradient(circle,rgba(140,120,250,.45),transparent 70%);filter:blur(30px);animation:float1 16s ease-in-out infinite;pointer-events:none;z-index:0"></div>'+
+      '<div style="position:fixed;bottom:-200px;right:-140px;width:560px;height:560px;border-radius:50%;background:radial-gradient(circle,rgba(180,150,255,.40),transparent 70%);filter:blur(30px);animation:float2 20s ease-in-out infinite;pointer-events:none;z-index:0"></div>';
+  }
+
+  // ============================ RENDER ============================
+  function render(){
+    save();
+    V = renderVals();
+
+    // preserve focus/caret across full re-render (for modal form inputs)
+    var active = document.activeElement;
+    var focusKey=null, selStart=null, selEnd=null;
+    if(active && active.dataset && active.dataset.store && active.dataset.field){
+      focusKey = active.dataset.store+'|'+active.dataset.field;
+      if('selectionStart' in active){ try{ selStart=active.selectionStart; selEnd=active.selectionEnd; }catch(e){} }
+    }
+
+    var main;
+    if(V.isDashboard) main = dashboardHTML();
+    else if(V.isCard) main = cardDetailHTML();
+    else if(V.isDebts) main = debtsHTML();
+    else main = dashboardHTML();
+
+    root.innerHTML =
+      '<div id="app" style="'+css(V.rootStyle)+'">'+
+        blobsHTML()+
+        '<div class="tj-shell" style="position:relative;z-index:1;display:grid;grid-template-columns:250px 1fr;min-height:100vh;gap:0">'+
+          sidebarHTML()+
+          '<main style="padding:30px 34px 60px;min-width:0;overflow-x:hidden">'+main+'</main>'+
+        '</div>'+
+        modalsHTML()+
+      '</div>';
+
+    if(focusKey){
+      var el = root.querySelector('[data-store="'+focusKey.split('|')[0]+'"][data-field="'+focusKey.split('|')[1]+'"]');
+      if(el){ el.focus(); if(selStart!=null){ try{ el.setSelectionRange(selStart,selEnd); }catch(e){} } }
+    }
+  }
+
+  // ============================ EVENT DISPATCH ============================
+  function sanitize(type, v){
+    if(type==='digits4') return v.replace(/\D/g,'').slice(0,4);
+    if(type==='num') return v.replace(/[^\d.]/g,'');
+    if(type==='int') return v.replace(/\D/g,'');
+    if(type==='rate') return v.replace(/[^\d.]/g,'');
+    return v;
+  }
+
+  root.addEventListener('click', function(e){
+    var stopEl = e.target.closest('[data-stop]');
+    var el = e.target.closest('[data-act]');
+    if(!el) return;
+    var act = el.dataset.act;
+    if(act==='closeModal' && el.hasAttribute('data-act') && !el.dataset.field){
+      // overlay close: ignore clicks that landed inside the modal card
+      if(stopEl && el.contains(stopEl) && el!==stopEl && e.target!==el) return;
+    }
+    var id = el.dataset.id;
+    switch(act){
+      case 'addPurchase': openPurchaseModal(); break;
+      case 'goHome': onGoHome(); break;
+      case 'goDebts': setState({view:'debts', selectedCardId:null}); break;
+      case 'addCard': openCardModal(); break;
+      case 'openSettings': openSettings(); break;
+      case 'openCard': openCard(id); break;
+      case 'deleteCard': deleteCard(id); break;
+      case 'addDebt': openDebtModal(); break;
+      case 'payAll': payCard(id); break;
+      case 'payDelta': payDelta(id, parseInt(el.dataset.d,10)); break;
+      case 'deletePurchase': deletePurchase(id); break;
+      case 'payDebtDelta': payDebtDelta(id, parseInt(el.dataset.d,10)); break;
+      case 'deleteDebt': deleteDebt(id); break;
+      case 'closeModal': closeModal(); break;
+      case 'brandVisa': setForm('form','brand','visa'); break;
+      case 'brandMaster': setForm('form','brand','mastercard'); break;
+      case 'selectTheme': setForm('form','theme', el.dataset.theme); break;
+      case 'submitCard': submitCard(); break;
+      case 'submitPurchase': submitPurchase(); break;
+      case 'submitSettings': submitSettings(); break;
+      case 'submitDebt': submitDebt(); break;
+    }
+  });
+
+  function handleFieldEvent(e){
+    var el = e.target.closest('[data-store][data-field]');
+    if(!el) return;
+    var store = el.dataset.store, field = el.dataset.field, sanit = el.dataset.sanit;
+    var val = sanitize(sanit, el.value);
+    if(store==='rates'){
+      var num = parseFloat(val) || 0;
+      setState(function(s){ var r={}; for(var k in s.rates) r[k]=s.rates[k]; r[field]=num; return {rates:r}; });
+      return;
+    }
+    setForm(store, field, val);
+  }
+  root.addEventListener('input', handleFieldEvent);
+  root.addEventListener('change', function(e){ if(e.target.tagName==='SELECT') handleFieldEvent(e); });
+
+  render();
+})();
+</script>
+</body>
+</html>
