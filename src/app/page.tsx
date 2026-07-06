@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getAppData } from "@/lib/data";
 import { TarjeteroApp } from "@/components/tarjetero/TarjeteroApp";
 
 export default async function Home() {
@@ -10,5 +11,7 @@ export default async function Home() {
 
   if (!user) redirect("/login");
 
-  return <TarjeteroApp userEmail={user.email ?? ""} />;
+  const data = await getAppData(user.id);
+
+  return <TarjeteroApp data={data} userEmail={user.email ?? ""} />;
 }

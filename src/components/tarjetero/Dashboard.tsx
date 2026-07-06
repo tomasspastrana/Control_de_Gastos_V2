@@ -19,6 +19,7 @@ import { DonutChart } from "./DonutChart";
 
 interface Props {
   data: AppData;
+  userName: string;
   onAddCard: () => void;
   onOpenCard: (id: string) => void;
   onDeleteCard: (id: string) => void;
@@ -52,7 +53,7 @@ function DashCard({ card, data, onOpen, onDelete }: { card: Card; data: AppData;
   );
 }
 
-export function Dashboard({ data, onAddCard, onOpenCard, onDeleteCard }: Props) {
+export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard }: Props) {
   const t = totals(data.cards, data.purchases, data.rates);
   const breakdown = categoryBreakdown(data.purchases, data.rates);
 
@@ -67,7 +68,7 @@ export function Dashboard({ data, onAddCard, onOpenCard, onDeleteCard }: Props) 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 16, marginBottom: 24 }}>
         <div>
           <div style={{ fontSize: 12.5, color: "var(--tj-muted)", fontWeight: 600, letterSpacing: ".02em" }}>Resumen general</div>
-          <h1 style={{ margin: "2px 0 0", fontSize: 30, fontWeight: 800, letterSpacing: "-.03em" }}>Hola, Alexandra 👋</h1>
+          <h1 style={{ margin: "2px 0 0", fontSize: 30, fontWeight: 800, letterSpacing: "-.03em" }}>Hola, {userName || "qué tal"} 👋</h1>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 11.5, color: "var(--tj-muted)", fontWeight: 600 }}>Deuda total (ARS)</div>

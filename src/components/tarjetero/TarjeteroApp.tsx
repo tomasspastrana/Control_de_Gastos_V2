@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { Toaster } from "@/components/ui/sonner";
-import { useTarjetero } from "@/hooks/useTarjetero";
-import { THEMES } from "@/lib/types";
+import { reducer, type Action } from "@/lib/store";
+import { THEMES, type AppData, type Card, type Debt, type Purchase, type Rates } from "@/lib/types";
+import * as actions from "@/app/actions";
 import { AppShell } from "./AppShell";
 import { Sidebar } from "./Sidebar";
 import { Dashboard } from "./Dashboard";
@@ -17,50 +18,65 @@ import { NewDebtModal } from "./modals/NewDebtModal";
 type View = "dashboard" | "card" | "debts";
 type Modal = null | "card" | "purchase" | "settings" | "debt";
 
-export function TarjeteroApp({ userEmail }: { userEmail: string }) {
-  const { data, dispatch } = useTarjetero();
+export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: string }) {
+  // optimistic overlay on top of the server data, driven by the same pure reducer
+  const [optimistic, applyOptimistic] = useOptimistic(data, reducer);
+  const [, startTransition] = useTransition();
+
   const [view, setView] = useState<View>("dashboard");
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [modal, setModal] = useState<Modal>(null);
 
-  const selectedCard = data.cards.find((c) => c.id === selectedCardId) ?? null;
+  // apply optimistically + run the server action inside one transition
+  function run(action: Action, serverCall: () => Promise<void>) {
+    startTransition(async () => {
+      applyOptimistic(action);
+      try {
+        await serverCall();
+      } catch {
+        // on failure the revalidated server data replaces the optimistic state
+      }
+    });
+  }
+
+  const selectedCard = optimistic.cards.find((c) => c.id === selectedCardId) ?? null;
   const effectiveView: View = view === "card" && !selectedCard ? "dashboard" : view;
 
-  // navigation
-  const openCard = (id: string) => {
-    setSelectedCardId(id);
-    setView("card");
-  };
-  const goHome = () => {
-    setView("dashboard");
-    setSelectedCardId(null);
-  };
-  const goDebts = () => {
-    setView("debts");
-    setSelectedCardId(null);
-  };
+  const openCard = (id: string) => { setSelectedCardId(id); setView("card"); };
+  const goHome = () => { setView("dashboard"); setSelectedCardId(null); };
+  const goDebts = () => { setView("debts"); setSelectedCardId(null); };
 
-  // modal defaults
-  const defaultPurchaseCardId = selectedCardId ?? data.cards[0]?.id ?? "";
-  const nextTheme = THEMES[data.cards.length % THEMES.length];
+  const defaultPurchaseCardId = selectedCardId ?? optimistic.cards[0]?.id ?? "";
+  const nextTheme = THEMES[optimistic.cards.length % THEMES.length];
+  const userName = (userEmail.split("@")[0] || "").replace(/^\w/, (c) => c.toUpperCase());
 
-  // domain
+  // domain handlers
+  const createCard = (card: Card) => run({ type: "ADD_CARD", card }, () => actions.createCard(card));
   const deleteCard = (id: string) => {
-    dispatch({ type: "DELETE_CARD", id });
+    run({ type: "DELETE_CARD", id }, () => actions.deleteCard(id));
     if (selectedCardId === id) goHome();
   };
+  const createPurchase = (p: Purchase) => run({ type: "ADD_PURCHASE", purchase: p }, () => actions.createPurchase(p));
+  const deletePurchase = (id: string) => run({ type: "DELETE_PURCHASE", id }, () => actions.deletePurchase(id));
+  const payDelta = (id: string, delta: number) => run({ type: "PAY_DELTA", id, delta }, () => actions.payPurchaseDelta(id, delta));
+  const payCard = (cardId: string) => run({ type: "PAY_CARD", cardId }, () => actions.payCard(cardId));
+  const createDebt = (d: Debt) => run({ type: "ADD_DEBT", debt: d }, () => actions.createDebt(d));
+  const deleteDebt = (id: string) => run({ type: "DELETE_DEBT", id }, () => actions.deleteDebt(id));
+  const payDebtDelta = (id: string, delta: number) => run({ type: "PAY_DEBT_DELTA", id, delta }, () => actions.payDebtDelta(id, delta));
+  const saveRates = (rates: Partial<Rates>) =>
+    run({ type: "SET_RATES", rates }, () => actions.saveRates({ usd: rates.USD ?? optimistic.rates.USD, eur: rates.EUR ?? optimistic.rates.EUR }));
 
   return (
     <>
       <AppShell
         sidebar={
           <Sidebar
-            cards={data.cards}
-            purchases={data.purchases}
-            rates={data.rates}
+            cards={optimistic.cards}
+            purchases={optimistic.purchases}
+            rates={optimistic.rates}
             view={effectiveView}
             selectedCardId={selectedCardId}
-            debtsCount={data.debts.length}
+            debtsCount={optimistic.debts.length}
             onAddPurchase={() => setModal("purchase")}
             onGoHome={goHome}
             onGoDebts={goDebts}
@@ -73,7 +89,8 @@ export function TarjeteroApp({ userEmail }: { userEmail: string }) {
       >
         {effectiveView === "dashboard" && (
           <Dashboard
-            data={data}
+            data={optimistic}
+            userName={userName}
             onAddCard={() => setModal("card")}
             onOpenCard={openCard}
             onDeleteCard={deleteCard}
@@ -84,55 +101,32 @@ export function TarjeteroApp({ userEmail }: { userEmail: string }) {
           <CardDetail
             key={selectedCard.id}
             card={selectedCard}
-            purchases={data.purchases}
-            rates={data.rates}
+            purchases={optimistic.purchases}
+            rates={optimistic.rates}
             onBack={goHome}
             onAddPurchase={() => setModal("purchase")}
             onDeleteCard={() => deleteCard(selectedCard.id)}
-            onPayAll={() => dispatch({ type: "PAY_CARD", cardId: selectedCard.id })}
-            onPayDelta={(id, delta) => dispatch({ type: "PAY_DELTA", id, delta })}
-            onDeletePurchase={(id) => dispatch({ type: "DELETE_PURCHASE", id })}
+            onPayAll={() => payCard(selectedCard.id)}
+            onPayDelta={payDelta}
+            onDeletePurchase={deletePurchase}
           />
         )}
 
         {effectiveView === "debts" && (
           <DebtsView
-            debts={data.debts}
-            rates={data.rates}
+            debts={optimistic.debts}
+            rates={optimistic.rates}
             onAddDebt={() => setModal("debt")}
-            onPayDebtDelta={(id, delta) => dispatch({ type: "PAY_DEBT_DELTA", id, delta })}
-            onDeleteDebt={(id) => dispatch({ type: "DELETE_DEBT", id })}
+            onPayDebtDelta={payDebtDelta}
+            onDeleteDebt={deleteDebt}
           />
         )}
       </AppShell>
 
-      {/* modals (kept mounted for enter/exit animations) */}
-      <NewCardModal
-        open={modal === "card"}
-        onClose={() => setModal(null)}
-        onCreate={(card) => dispatch({ type: "ADD_CARD", card })}
-        initialTheme={nextTheme}
-      />
-      <NewPurchaseModal
-        open={modal === "purchase"}
-        onClose={() => setModal(null)}
-        onCreate={(purchase) => dispatch({ type: "ADD_PURCHASE", purchase })}
-        cards={data.cards}
-        rates={data.rates}
-        defaultCardId={defaultPurchaseCardId}
-      />
-      <SettingsModal
-        open={modal === "settings"}
-        onClose={() => setModal(null)}
-        rates={data.rates}
-        onSave={(rates) => dispatch({ type: "SET_RATES", rates })}
-      />
-      <NewDebtModal
-        open={modal === "debt"}
-        onClose={() => setModal(null)}
-        onCreate={(debt) => dispatch({ type: "ADD_DEBT", debt })}
-        rates={data.rates}
-      />
+      <NewCardModal open={modal === "card"} onClose={() => setModal(null)} onCreate={createCard} initialTheme={nextTheme} />
+      <NewPurchaseModal open={modal === "purchase"} onClose={() => setModal(null)} onCreate={createPurchase} cards={optimistic.cards} rates={optimistic.rates} defaultCardId={defaultPurchaseCardId} />
+      <SettingsModal open={modal === "settings"} onClose={() => setModal(null)} rates={optimistic.rates} onSave={saveRates} />
+      <NewDebtModal open={modal === "debt"} onClose={() => setModal(null)} onCreate={createDebt} rates={optimistic.rates} />
 
       <Toaster position="top-center" richColors />
     </>
