@@ -38,9 +38,10 @@ interface Props {
   onAddCard: () => void;
   onOpenSettings: () => void;
   onOpenCard: (id: string) => void;
+  userEmail: string;
 }
 
-export function Sidebar({ cards, purchases, rates, view, selectedCardId, debtsCount, onAddPurchase, onGoHome, onGoDebts, onAddCard, onOpenSettings, onOpenCard }: Props) {
+export function Sidebar({ cards, purchases, rates, view, selectedCardId, debtsCount, onAddPurchase, onGoHome, onGoDebts, onAddCard, onOpenSettings, onOpenCard, userEmail }: Props) {
   return (
     <aside className="tj-side" style={{ display: "flex", flexDirection: "column", gap: 14, padding: "22px 18px", height: "100vh", position: "sticky", top: 0 }}>
       {/* logo */}
@@ -101,6 +102,19 @@ export function Sidebar({ cards, purchases, rates, view, selectedCardId, debtsCo
       <button onClick={onOpenSettings} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 15px", border: "none", borderRadius: 14, background: "transparent", color: "var(--tj-muted-2)", fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}>
         ⚙ Ajustes · Tipo de cambio
       </button>
+
+      {/* session footer */}
+      <div style={{ borderTop: "1px solid rgba(120,110,180,.18)", paddingTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10, color: "#9a96b6", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>Sesión</div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={userEmail}>{userEmail}</div>
+        </div>
+        <form action="/auth/signout" method="post">
+          <button type="submit" title="Cerrar sesión" style={{ border: "none", background: "rgba(214,69,90,.08)", color: "var(--tj-danger)", fontWeight: 700, fontSize: 11.5, padding: "8px 11px", borderRadius: 11, cursor: "pointer" }}>
+            Salir
+          </button>
+        </form>
+      </div>
     </aside>
   );
 }

@@ -17,7 +17,7 @@ import { NewDebtModal } from "./modals/NewDebtModal";
 type View = "dashboard" | "card" | "debts";
 type Modal = null | "card" | "purchase" | "settings" | "debt";
 
-export function TarjeteroApp() {
+export function TarjeteroApp({ userEmail }: { userEmail: string }) {
   const { data, dispatch } = useTarjetero();
   const [view, setView] = useState<View>("dashboard");
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -67,6 +67,7 @@ export function TarjeteroApp() {
             onAddCard={() => setModal("card")}
             onOpenSettings={() => setModal("settings")}
             onOpenCard={openCard}
+            userEmail={userEmail}
           />
         }
       >
