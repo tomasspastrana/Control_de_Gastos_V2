@@ -23,8 +23,8 @@ export interface Bank {
 
 export const BANKS: Bank[] = [
   // --- confirmed from statements ---
-  { id: "bbva", name: "BBVA Francés", confirmed: true, preset: { ruleType: "weekday_cycle", dueDays: 11 } },
-  { id: "patagonia", name: "Banco Patagonia", confirmed: true, preset: { ruleType: "weekday_cycle", dueDays: 11 } },
+  { id: "bbva", name: "BBVA Francés", confirmed: true, preset: { ruleType: "weekday_cycle", dueDays: 10 } },
+  { id: "patagonia", name: "Banco Patagonia", confirmed: true, preset: { ruleType: "weekday_cycle", dueDays: 10 } },
   { id: "uala", name: "Ualá", confirmed: true, preset: { ruleType: "fixed_day", day: 30, businessAdjust: true, dueDays: 8 } },
   { id: "sucredito", name: "Sucrédito", confirmed: true, preset: { ruleType: "fixed_day", day: 23, businessAdjust: false, dueDays: 9 } },
   // --- generic defaults (fixed day, user confirms) ---
