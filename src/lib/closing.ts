@@ -1,0 +1,164 @@
+// Closing-date logic for credit cards (Argentina).
+// Two rule shapes cover the banks we've seen:
+//  - fixed_day: closes on a calendar day each month (optionally moved to the previous business day)
+//  - weekday_cycle: closes always on the same weekday, alternating +28/+35 days from an anchor
+//    (BBVA Francés, Banco Patagonia). Predictions are estimates; the user can re-anchor.
+//
+// Pure & side-effect free → unit-tested in closing.test.ts.
+
+export type ClosingRule =
+  | { type: "fixed_day"; day: number; businessAdjust: boolean }
+  | { type: "weekday_cycle"; anchor: string; nextGap: 28 | 35 }; // anchor = "yyyy-mm-dd"
+
+// ---- Argentina national holidays (maintainable; weekends are handled separately).
+// Note: does NOT include ad-hoc "feriados puente" — closing dates are editable to correct drift.
+export const AR_HOLIDAYS = new Set<string>([
+  // 2026
+  "2026-01-01", "2026-02-16", "2026-02-17", "2026-03-24", "2026-04-02", "2026-04-03",
+  "2026-05-01", "2026-05-25", "2026-06-17", "2026-06-20", "2026-07-09", "2026-08-17",
+  "2026-10-12", "2026-11-20", "2026-12-08", "2026-12-25",
+  // 2027
+  "2027-01-01", "2027-02-08", "2027-02-09", "2027-03-24", "2027-03-26", "2027-04-02",
+  "2027-05-01", "2027-05-25", "2027-06-21", "2027-06-20", "2027-07-09", "2027-08-16",
+  "2027-10-11", "2027-11-22", "2027-12-08", "2027-12-25",
+]);
+
+// ---- date helpers (work at local midnight to avoid TZ drift) ----
+export function ymd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+export function parseYmd(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+export function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
+}
+export function isBusinessDay(d: Date): boolean {
+  const wd = d.getDay();
+  if (wd === 0 || wd === 6) return false; // Sun / Sat
+  return !AR_HOLIDAYS.has(ymd(d));
+}
+export function prevBusinessDay(d: Date): Date {
+  let r = d;
+  while (!isBusinessDay(r)) r = addDays(r, -1);
+  return r;
+}
+export function nextBusinessDay(d: Date): Date {
+  let r = d;
+  while (!isBusinessDay(r)) r = addDays(r, 1);
+  return r;
+}
+
+function atMidnight(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function fixedClosingForMonth(year: number, month: number, day: number, businessAdjust: boolean): Date {
+  const dom = Math.min(day, lastDayOfMonth(year, month));
+  let d = new Date(year, month, dom);
+  if (businessAdjust) d = prevBusinessDay(d);
+  return d;
+}
+
+/** Next closing date on or after `from` (defaults to today). */
+export function nextClosing(rule: ClosingRule, from: Date = new Date()): Date {
+  const start = atMidnight(from);
+  if (rule.type === "fixed_day") {
+    for (let i = 0; i < 4; i++) {
+      const base = new Date(start.getFullYear(), start.getMonth() + i, 1);
+      const c = fixedClosingForMonth(base.getFullYear(), base.getMonth(), rule.day, rule.businessAdjust);
+      if (c >= start) return c;
+    }
+    // fallback (shouldn't happen)
+    return fixedClosingForMonth(start.getFullYear(), start.getMonth() + 1, rule.day, rule.businessAdjust);
+  }
+  // weekday_cycle
+  let c = parseYmd(rule.anchor);
+  let gap = rule.nextGap;
+  let guard = 0;
+  while (c < start && guard++ < 240) {
+    c = addDays(c, gap);
+    gap = gap === 28 ? 35 : 28;
+  }
+  return c;
+}
+
+/** The next `n` closing dates starting at nextClosing(from). */
+export function upcomingClosings(rule: ClosingRule, from: Date = new Date(), n = 3): Date[] {
+  const out: Date[] = [];
+  let c = nextClosing(rule, from);
+  out.push(c);
+  if (rule.type === "fixed_day") {
+    for (let i = 1; i < n; i++) {
+      const base = new Date(c.getFullYear(), c.getMonth() + 1, 1);
+      c = fixedClosingForMonth(base.getFullYear(), base.getMonth(), rule.day, rule.businessAdjust);
+      out.push(c);
+    }
+  } else {
+    // continue alternating from the gap that follows the current closing
+    let steps = 0;
+    let cursor = parseYmd(rule.anchor);
+    let gap = rule.nextGap;
+    // fast-forward gap phase to `c`
+    while (cursor < c && steps++ < 240) {
+      cursor = addDays(cursor, gap);
+      gap = gap === 28 ? 35 : 28;
+    }
+    for (let i = 1; i < n; i++) {
+      c = addDays(c, gap);
+      gap = gap === 28 ? 35 : 28;
+      out.push(c);
+    }
+  }
+  return out;
+}
+
+/** Payment due date = closing + dueDays (calendar), moved to next business day if needed. */
+export function dueDate(closing: Date, dueDays: number): Date {
+  return nextBusinessDay(addDays(closing, dueDays));
+}
+
+/** Whole days from `from` (today) until `date` (negative if past). */
+export function daysUntil(date: Date, from: Date = new Date()): number {
+  return Math.round((atMidnight(date).getTime() - atMidnight(from).getTime()) / 86_400_000);
+}
+
+/** Derive a weekday_cycle rule from two consecutive real closing dates (prev < last). */
+export function deriveWeekdayCycle(prev: string, last: string): { anchor: string; nextGap: 28 | 35 } {
+  const gap = daysUntil(parseYmd(last), parseYmd(prev)); // 28 or 35
+  return { anchor: last, nextGap: gap === 35 ? 28 : 35 };
+}
+
+/** Build a ClosingRule from a card's flat columns (null if not configured). */
+export function ruleFromCard(c: {
+  closingRuleType?: string | null;
+  closingDay?: number | null;
+  closingBusinessAdjust?: boolean | null;
+  closingAnchor?: string | null;
+  closingNextGap?: number | null;
+}): ClosingRule | null {
+  if (c.closingRuleType === "fixed_day" && c.closingDay != null) {
+    return { type: "fixed_day", day: c.closingDay, businessAdjust: !!c.closingBusinessAdjust };
+  }
+  if (c.closingRuleType === "weekday_cycle" && c.closingAnchor && (c.closingNextGap === 28 || c.closingNextGap === 35)) {
+    return { type: "weekday_cycle", anchor: c.closingAnchor, nextGap: c.closingNextGap };
+  }
+  return null;
+}
+
+/** Short human label, e.g. "jue 23 jul". */
+export function fmtClosing(d: Date): string {
+  return d
+    .toLocaleDateString("es-AR", { weekday: "short", day: "2-digit", month: "short" })
+    .replace(/\./g, "")
+    .replace(",", "");
+}

@@ -10,13 +10,13 @@ import {
   fmtCur,
   fmtDate,
   fmtShort,
-  purchaseTotalArs,
   totals,
 } from "@/lib/calc";
 import { CreditCardVisual } from "./CreditCardVisual";
 import { StatTile } from "./StatTile";
 import { ProgressBar } from "./ProgressBar";
 import { DonutChart } from "./DonutChart";
+import { ClosingInfo } from "./ClosingInfo";
 
 interface Props {
   data: AppData;
@@ -49,6 +49,7 @@ function DashCard({ card, data, onOpen, onDelete }: { card: Card; data: AppData;
           <span style={{ fontSize: 10.5, color: "var(--tj-muted)", fontWeight: 600 }}>{Math.round(m.pct * 100)}% usado</span>
           <button onClick={onDelete} style={{ border: "none", background: "none", color: "#c86", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>Eliminar</button>
         </div>
+        <ClosingInfo card={card} compact />
       </div>
     </div>
   );
@@ -137,7 +138,7 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard 
                     <div style={{ fontSize: 11, color: "var(--tj-muted)", fontWeight: 600 }}>{cardName(r.cardId)} · {fmtDate(r.date)}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{fmt(purchaseTotalArs(r, data.rates))}</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{fmt(r.amount * (data.rates[r.currency] || 1))}</div>
                     <div style={{ fontSize: 10.5, color: "var(--tj-muted)", fontWeight: 600 }}>{fmtCur(r.amount, r.currency)}</div>
                   </div>
                 </div>

@@ -18,6 +18,13 @@ function toCard(r: CardRow): Card {
     limitCurrency: r.limitCurrency,
     expiry: r.expiry,
     theme: r.theme,
+    issuer: r.issuer,
+    closingRuleType: r.closingRuleType,
+    closingDay: r.closingDay,
+    closingBusinessAdjust: r.closingBusinessAdjust,
+    closingAnchor: r.closingAnchor,
+    closingNextGap: r.closingNextGap,
+    dueDays: r.dueDays,
   };
 }
 
@@ -30,7 +37,6 @@ function toPurchase(r: PurchaseRow): Purchase {
     currency: r.currency,
     installments: r.installments,
     paidInstallments: r.paidInstallments,
-    installmentValue: r.installmentValue ?? undefined,
     category: r.category,
     date: r.date,
   };

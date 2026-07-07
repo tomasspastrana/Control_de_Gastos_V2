@@ -5,7 +5,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { cards, debts, profiles, purchases } from "@/db/schema";
 import { createClient } from "@/lib/supabase/server";
-import { cardSchema, debtSchema, purchaseSchema, ratesSchema } from "@/lib/schemas";
+import { cardSchema, closingConfigSchema, debtSchema, purchaseSchema, ratesSchema } from "@/lib/schemas";
 
 async function requireUserId(): Promise<string> {
   const supabase = await createClient();
@@ -34,7 +34,32 @@ export async function createCard(input: unknown) {
     limitCurrency: d.limitCurrency,
     expiry: d.expiry || "--/--",
     theme: d.theme,
+    issuer: d.issuer ?? null,
+    closingRuleType: d.closingRuleType ?? null,
+    closingDay: d.closingDay ?? null,
+    closingBusinessAdjust: d.closingBusinessAdjust ?? false,
+    closingAnchor: d.closingAnchor ?? null,
+    closingNextGap: d.closingNextGap ?? null,
+    dueDays: d.dueDays ?? null,
   });
+  done();
+}
+
+/** Configure / re-anchor a card's closing rule. */
+export async function updateCardClosing(cardId: string, input: unknown) {
+  const userId = await requireUserId();
+  const d = closingConfigSchema.parse(input);
+  await db
+    .update(cards)
+    .set({
+      closingRuleType: d.closingRuleType ?? null,
+      closingDay: d.closingDay ?? null,
+      closingBusinessAdjust: d.closingBusinessAdjust ?? false,
+      closingAnchor: d.closingAnchor ?? null,
+      closingNextGap: d.closingNextGap ?? null,
+      dueDays: d.dueDays ?? null,
+    })
+    .where(and(eq(cards.id, cardId), eq(cards.userId, userId)));
   done();
 }
 
@@ -58,7 +83,6 @@ export async function createPurchase(input: unknown) {
     currency: d.currency,
     installments: d.installments,
     paidInstallments: d.paidInstallments,
-    installmentValue: d.installmentValue ?? null,
     category: d.category,
     date: d.date,
   });

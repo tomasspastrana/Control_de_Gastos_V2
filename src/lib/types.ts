@@ -6,6 +6,8 @@ export type ThemeName = "violet" | "coral" | "ocean" | "teal" | "rose" | "noir";
 
 export type Rates = Record<Currency, number>;
 
+export type ClosingRuleType = "fixed_day" | "weekday_cycle";
+
 export interface Card {
   id: string;
   nickname: string;
@@ -16,6 +18,14 @@ export interface Card {
   limitCurrency: Currency;
   expiry: string;
   theme: ThemeName;
+  issuer?: string | null;
+  // billing-cycle closing rule (null = not configured)
+  closingRuleType?: ClosingRuleType | null;
+  closingDay?: number | null;
+  closingBusinessAdjust?: boolean;
+  closingAnchor?: string | null; // yyyy-mm-dd
+  closingNextGap?: number | null; // 28 | 35
+  dueDays?: number | null;
 }
 
 export interface Purchase {
@@ -28,9 +38,6 @@ export interface Purchase {
   paidInstallments: number;
   category: string;
   date: string; // ISO yyyy-mm-dd
-  /** Optional real value of ONE installment (already includes bank interest).
-   *  When set, the amount committed to the limit is installmentValue × installments. */
-  installmentValue?: number;
 }
 
 export interface Debt {

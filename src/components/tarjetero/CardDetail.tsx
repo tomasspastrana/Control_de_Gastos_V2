@@ -1,12 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { toast } from "sonner";
 import type { Card, Purchase, Rates } from "@/lib/types";
-import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseTotalArs } from "@/lib/calc";
+import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, rate } from "@/lib/calc";
+import { updateCardClosing } from "@/app/actions";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CreditCardVisual } from "./CreditCardVisual";
 import { ProgressBar } from "./ProgressBar";
 import { InstallmentDots } from "./InstallmentDots";
 import { PayControls } from "./PayControls";
+import { ClosingInfo } from "./ClosingInfo";
+import { ClosingFields, buildClosingPayload, formFromCard, type ClosingForm } from "./ClosingFields";
 
 interface Props {
   card: Card;
@@ -23,6 +29,27 @@ interface Props {
 export function CardDetail({ card, purchases, rates, onBack, onAddPurchase, onDeleteCard, onPayAll, onPayDelta, onDeletePurchase }: Props) {
   const m = cardMetrics(card, purchases, rates);
   const ps = purchases.filter((p) => p.cardId === card.id);
+
+  const [closingOpen, setClosingOpen] = useState(false);
+  const [closingForm, setClosingForm] = useState<ClosingForm>(formFromCard(card));
+  const [saving, setSaving] = useState(false);
+
+  function openClosing() {
+    setClosingForm(formFromCard(card));
+    setClosingOpen(true);
+  }
+  async function saveClosing() {
+    setSaving(true);
+    try {
+      await updateCardClosing(card.id, buildClosingPayload(closingForm));
+      toast.success("Ciclo de cierre actualizado");
+      setClosingOpen(false);
+    } catch {
+      toast.error("No se pudo guardar");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.32, ease: [0.2, 0.8, 0.2, 1] }}>
@@ -42,6 +69,17 @@ export function CardDetail({ card, purchases, rates, onBack, onAddPurchase, onDe
             <ProgressBar pct={m.pct} height={8} />
             <div className="mt-1.5 text-right text-[11px] font-semibold" style={{ color: "var(--tj-muted)" }}>
               {Math.round(m.pct * 100)}% del límite usado
+            </div>
+
+            <div style={{ borderTop: "1px solid rgba(120,110,180,.16)", marginTop: 14, paddingTop: 14, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+              {card.closingRuleType ? (
+                <ClosingInfo card={card} />
+              ) : (
+                <div className="text-[12px] font-semibold" style={{ color: "var(--tj-muted)" }}>Configurá el ciclo de cierre</div>
+              )}
+              <button onClick={openClosing} className="tj-cta shrink-0 cursor-pointer rounded-[10px] px-2.5 py-1.5 text-[11.5px] font-bold" style={{ background: "rgba(109,94,246,.12)", color: "var(--tj-accent)", border: "none" }}>
+                Ajustar cierre
+              </button>
             </div>
           </div>
 
@@ -68,7 +106,7 @@ export function CardDetail({ card, purchases, rates, onBack, onAddPurchase, onDe
             <div className="flex flex-col gap-3.5">
               <AnimatePresence initial={false}>
                 {ps.map((p) => {
-                  const tot = purchaseTotalArs(p, rates);
+                  const tot = p.amount * rate(rates, p.currency);
                   const per = tot / p.installments;
                   const rem = (tot * (p.installments - p.paidInstallments)) / p.installments;
                   return (
@@ -127,6 +165,20 @@ export function CardDetail({ card, purchases, rates, onBack, onAddPurchase, onDe
           )}
         </div>
       </div>
+
+      <Dialog open={closingOpen} onOpenChange={(o) => !o && setClosingOpen(false)}>
+        <DialogContent className="tj-modal">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-extrabold tracking-tight">Ciclo de cierre · {card.nickname}</DialogTitle>
+          </DialogHeader>
+          <div className="mb-4">
+            <ClosingFields form={closingForm} setForm={setClosingForm} />
+          </div>
+          <button onClick={saveClosing} disabled={saving} className="tj-submit">
+            {saving ? "Guardando…" : "Guardar"}
+          </button>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }

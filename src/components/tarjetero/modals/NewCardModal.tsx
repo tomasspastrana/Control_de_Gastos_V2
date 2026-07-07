@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TjSelect } from "../TjSelect";
+import { ClosingFields, buildClosingPayload, emptyClosingForm, type ClosingForm } from "../ClosingFields";
 import { cardSchema } from "@/lib/schemas";
 import { uid } from "@/lib/id";
 import { themeColors } from "@/lib/calc";
+import { BANKS, bankById } from "@/lib/banks";
 import { CURRENCIES, THEMES, type Card, type ThemeName } from "@/lib/types";
 
 interface Props {
@@ -29,13 +31,31 @@ const emptyForm = (theme: ThemeName) => ({
 
 export function NewCardModal({ open, onClose, onCreate, initialTheme }: Props) {
   const [f, setF] = useState(emptyForm(initialTheme));
+  const [issuer, setIssuer] = useState("");
+  const [closing, setClosing] = useState<ClosingForm>(emptyClosingForm());
 
   useEffect(() => {
-    if (open) setF(emptyForm(initialTheme));
+    if (open) {
+      setF(emptyForm(initialTheme));
+      setIssuer("");
+      setClosing(emptyClosingForm());
+    }
   }, [open, initialTheme]);
 
   const set = <K extends keyof ReturnType<typeof emptyForm>>(k: K, v: (typeof f)[K]) =>
     setF((prev) => ({ ...prev, [k]: v }));
+
+  function onIssuerChange(id: string) {
+    setIssuer(id);
+    const p = bankById(id)?.preset;
+    setClosing({
+      ...emptyClosingForm(),
+      ruleType: p?.ruleType ?? "",
+      day: p?.day ? String(p.day) : "",
+      businessAdjust: !!p?.businessAdjust,
+      dueDays: p?.dueDays ? String(p.dueDays) : "",
+    });
+  }
 
   function submit() {
     const parsed = cardSchema.safeParse(f);
@@ -54,6 +74,8 @@ export function NewCardModal({ open, onClose, onCreate, initialTheme }: Props) {
       limitCurrency: d.limitCurrency,
       expiry: d.expiry || "--/--",
       theme: d.theme,
+      issuer: issuer || null,
+      ...buildClosingPayload(closing),
     };
     onCreate(card);
     toast.success("Tarjeta creada");
@@ -75,6 +97,15 @@ export function NewCardModal({ open, onClose, onCreate, initialTheme }: Props) {
           <div className="tj-field">
             <label className="tj-label">Titular</label>
             <input className="tj-input" value={f.holder} onChange={(e) => set("holder", e.target.value)} placeholder="Ej: Alexandra Vaise" />
+          </div>
+          <div className="tj-field">
+            <label className="tj-label">Banco emisor (autocompleta el ciclo de cierre)</label>
+            <TjSelect
+              value={issuer}
+              onChange={onIssuerChange}
+              placeholder="Elegí tu banco (opcional)"
+              options={[{ value: "", label: "Elegí tu banco (opcional)" }, ...BANKS.map((b) => ({ value: b.id, label: b.confirmed ? `${b.name} ✓` : b.name }))]}
+            />
           </div>
           <div className="flex gap-3">
             <div className="tj-field flex-1">
@@ -141,6 +172,10 @@ export function NewCardModal({ open, onClose, onCreate, initialTheme }: Props) {
                 />
               );
             })}
+          </div>
+
+          <div className="mb-4">
+            <ClosingFields form={closing} setForm={setClosing} />
           </div>
 
           <button onClick={submit} className="tj-submit">Crear tarjeta</button>

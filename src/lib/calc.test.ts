@@ -3,7 +3,6 @@ import {
   cardMetrics,
   categoryBreakdown,
   purchaseRemaining,
-  purchaseTotalArs,
   totals,
 } from "./calc";
 import type { Card, Purchase, Rates } from "./types";
@@ -42,20 +41,6 @@ describe("purchaseRemaining", () => {
   });
   it("is zero when fully paid", () => {
     expect(purchaseRemaining(p({ paidInstallments: 12 }), rates)).toBe(0);
-  });
-});
-
-describe("purchaseTotalArs (valor de cuota con interés)", () => {
-  it("uses installmentValue × installments when provided", () => {
-    // 100 USD/cuota × 12 × 1000 = 1,200,000 (ignora el precio 'amount')
-    const p2 = p({ amount: 1, installmentValue: 100 });
-    expect(purchaseTotalArs(p2, rates)).toBe(1_200_000);
-    // y la deuda restante respeta las cuotas pagadas (9/12)
-    expect(purchaseRemaining(p2, rates)).toBe(900_000);
-  });
-  it("falls back to amount when installmentValue is absent or zero", () => {
-    expect(purchaseTotalArs(p({ installmentValue: 0 }), rates)).toBe(1_000_000);
-    expect(purchaseTotalArs(p({}), rates)).toBe(1_000_000);
   });
 });
 

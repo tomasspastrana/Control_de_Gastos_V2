@@ -2,11 +2,12 @@
 // user_id references Supabase's auth.users(id); that FK + RLS live in supabase/rls.sql
 // (Drizzle does not manage the `auth` schema).
 
-import { integer, numeric, pgEnum, pgTable, text, timestamp, uuid, date } from "drizzle-orm/pg-core";
+import { boolean, integer, numeric, pgEnum, pgTable, text, timestamp, uuid, date } from "drizzle-orm/pg-core";
 
 export const currencyEnum = pgEnum("currency", ["ARS", "USD", "EUR"]);
 export const brandEnum = pgEnum("card_brand", ["visa", "mastercard"]);
 export const themeEnum = pgEnum("card_theme", ["violet", "coral", "ocean", "teal", "rose", "noir"]);
+export const closingRuleEnum = pgEnum("closing_rule", ["fixed_day", "weekday_cycle"]);
 
 export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey(), // = auth.users.id
@@ -27,6 +28,14 @@ export const cards = pgTable("cards", {
   limitCurrency: currencyEnum("limit_currency").notNull().default("ARS"),
   expiry: text("expiry").notNull().default("--/--"),
   theme: themeEnum("theme").notNull().default("violet"),
+  issuer: text("issuer"),
+  // billing-cycle closing rule (nullable = not configured)
+  closingRuleType: closingRuleEnum("closing_rule_type"),
+  closingDay: integer("closing_day"),
+  closingBusinessAdjust: boolean("closing_business_adjust").notNull().default(false),
+  closingAnchor: date("closing_anchor", { mode: "string" }),
+  closingNextGap: integer("closing_next_gap"),
+  dueDays: integer("due_days"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -41,7 +50,6 @@ export const purchases = pgTable("purchases", {
   currency: currencyEnum("currency").notNull().default("ARS"),
   installments: integer("installments").notNull().default(1),
   paidInstallments: integer("paid_installments").notNull().default(0),
-  installmentValue: numeric("installment_value", { precision: 14, scale: 2, mode: "number" }),
   category: text("category").notNull().default("Otros"),
   date: date("date", { mode: "string" }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
