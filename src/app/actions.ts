@@ -58,6 +58,7 @@ export async function createPurchase(input: unknown) {
     currency: d.currency,
     installments: d.installments,
     paidInstallments: d.paidInstallments,
+    installmentValue: d.installmentValue ?? null,
     category: d.category,
     date: d.date,
   });

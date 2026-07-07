@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { TjSelect } from "../TjSelect";
 import { purchaseSchema } from "@/lib/schemas";
 import { uid } from "@/lib/id";
 import { fmt, rate } from "@/lib/calc";
@@ -24,6 +25,7 @@ const emptyForm = (cardId: string) => ({
   currency: "USD" as Currency,
   installments: "3",
   paidInstallments: "0",
+  installmentValue: "",
   category: "Tecnología" as string,
   date: new Date().toISOString().slice(0, 10),
 });
@@ -38,7 +40,10 @@ export function NewPurchaseModal({ open, onClose, onCreate, cards, rates, defaul
   const set = <K extends keyof ReturnType<typeof emptyForm>>(k: K, v: (typeof f)[K]) =>
     setF((prev) => ({ ...prev, [k]: v }));
 
-  const preview = fmt((parseFloat(f.amount) || 0) * rate(rates, f.currency));
+  const iv = parseFloat(f.installmentValue) || 0;
+  const instN = parseInt(f.installments) || 1;
+  const totalMonto = iv > 0 ? iv * instN : parseFloat(f.amount) || 0;
+  const preview = fmt(totalMonto * rate(rates, f.currency));
   const hasCards = cards.length > 0;
 
   function submit() {
@@ -56,6 +61,7 @@ export function NewPurchaseModal({ open, onClose, onCreate, cards, rates, defaul
       currency: d.currency,
       installments: d.installments,
       paidInstallments: d.paidInstallments,
+      installmentValue: d.installmentValue,
       category: d.category,
       date: d.date,
     };
@@ -75,11 +81,11 @@ export function NewPurchaseModal({ open, onClose, onCreate, cards, rates, defaul
           <div>
             <div className="tj-field">
               <label className="tj-label">Tarjeta</label>
-              <select className="tj-input" value={f.cardId} onChange={(e) => set("cardId", e.target.value)}>
-                {cards.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nickname} ···{c.last4}</option>
-                ))}
-              </select>
+              <TjSelect
+                value={f.cardId}
+                onChange={(v) => set("cardId", v)}
+                options={cards.map((c) => ({ value: c.id, label: `${c.nickname} ···${c.last4}` }))}
+              />
             </div>
             <div className="tj-field">
               <label className="tj-label">Comercio / descripción</label>
@@ -92,11 +98,11 @@ export function NewPurchaseModal({ open, onClose, onCreate, cards, rates, defaul
               </div>
               <div className="tj-field flex-1">
                 <label className="tj-label">Moneda</label>
-                <select className="tj-input" value={f.currency} onChange={(e) => set("currency", e.target.value as Currency)}>
-                  {CURRENCIES.map((c) => (
-                    <option key={c} value={c}>{c === "ARS" ? "ARS $" : c}</option>
-                  ))}
-                </select>
+                <TjSelect
+                  value={f.currency}
+                  onChange={(v) => set("currency", v as Currency)}
+                  options={CURRENCIES.map((c) => ({ value: c, label: c === "ARS" ? "ARS $" : c }))}
+                />
               </div>
             </div>
             <div className="-mt-1.5 mb-1 text-[11.5px] font-bold" style={{ color: "var(--tj-accent)" }}>
@@ -112,14 +118,21 @@ export function NewPurchaseModal({ open, onClose, onCreate, cards, rates, defaul
                 <input className="tj-input" value={f.paidInstallments} inputMode="numeric" onChange={(e) => set("paidInstallments", e.target.value.replace(/\D/g, ""))} />
               </div>
             </div>
+            <div className="tj-field">
+              <label className="tj-label">Valor de la cuota (opcional, con interés)</label>
+              <input className="tj-input" value={f.installmentValue} inputMode="decimal" onChange={(e) => set("installmentValue", e.target.value.replace(/[^\d.]/g, ""))} placeholder="Ej: 115000 — así coincide con tu resumen" />
+              <div className="mt-1.5 text-[11px] font-semibold" style={{ color: "var(--tj-muted)" }}>
+                Si lo cargás, el límite se descuenta como cuota × cantidad (incluye interés). Si lo dejás vacío, se usa el monto ÷ cuotas.
+              </div>
+            </div>
             <div className="flex gap-3">
               <div className="tj-field flex-1">
                 <label className="tj-label">Categoría</label>
-                <select className="tj-input" value={f.category} onChange={(e) => set("category", e.target.value)}>
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                <TjSelect
+                  value={f.category}
+                  onChange={(v) => set("category", v)}
+                  options={CATEGORIES.map((c) => ({ value: c, label: c }))}
+                />
               </div>
               <div className="tj-field flex-1">
                 <label className="tj-label">Fecha</label>

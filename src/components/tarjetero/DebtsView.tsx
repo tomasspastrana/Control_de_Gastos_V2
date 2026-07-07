@@ -29,7 +29,7 @@ export function DebtsView({ debts, rates, onAddDebt, onPayDebtDelta, onDeleteDeb
           <div className="text-[12.5px] font-semibold" style={{ color: "var(--tj-muted)", letterSpacing: ".02em" }}>Registro independiente</div>
           <h1 className="mt-0.5 mb-0 text-[28px] font-extrabold tracking-tight">Deudas personales</h1>
         </div>
-        <button onClick={onAddDebt} className="cursor-pointer rounded-[13px] border-none px-[17px] py-[11px] text-[12.5px] font-bold text-white" style={{ background: "var(--tj-grad)", boxShadow: "0 8px 18px rgba(109,94,246,.32)" }}>
+        <button onClick={onAddDebt} className="tj-cta cursor-pointer rounded-[13px] border-none px-[17px] py-[11px] text-[12.5px] font-bold text-white" style={{ background: "var(--tj-grad)", boxShadow: "0 8px 18px rgba(109,94,246,.32)" }}>
           + Agregar deuda
         </button>
       </div>

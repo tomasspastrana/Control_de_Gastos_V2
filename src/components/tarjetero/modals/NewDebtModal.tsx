@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { TjSelect } from "../TjSelect";
 import { debtSchema } from "@/lib/schemas";
 import { uid } from "@/lib/id";
 import { fmt, rate } from "@/lib/calc";
@@ -81,11 +82,11 @@ export function NewDebtModal({ open, onClose, onCreate, rates }: Props) {
           </div>
           <div className="tj-field flex-1">
             <label className="tj-label">Moneda</label>
-            <select className="tj-input" value={f.currency} onChange={(e) => set("currency", e.target.value as Currency)}>
-              {CURRENCIES.map((c) => (
-                <option key={c} value={c}>{c === "ARS" ? "ARS $" : c}</option>
-              ))}
-            </select>
+            <TjSelect
+              value={f.currency}
+              onChange={(v) => set("currency", v as Currency)}
+              options={CURRENCIES.map((c) => ({ value: c, label: c === "ARS" ? "ARS $" : c }))}
+            />
           </div>
         </div>
         <div className="-mt-1.5 mb-1 text-[11.5px] font-bold" style={{ color: "var(--tj-accent)" }}>

@@ -28,6 +28,9 @@ export interface Purchase {
   paidInstallments: number;
   category: string;
   date: string; // ISO yyyy-mm-dd
+  /** Optional real value of ONE installment (already includes bank interest).
+   *  When set, the amount committed to the limit is installmentValue × installments. */
+  installmentValue?: number;
 }
 
 export interface Debt {

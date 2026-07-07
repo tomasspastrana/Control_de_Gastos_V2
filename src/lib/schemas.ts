@@ -28,6 +28,10 @@ export const purchaseSchema = z
     currency: currencyEnum,
     installments: z.coerce.number().int().min(1).catch(1),
     paidInstallments: z.coerce.number().int().min(0).catch(0),
+    installmentValue: z.preprocess(
+      (v) => (v === "" || v == null ? undefined : v),
+      z.coerce.number().positive().optional(),
+    ),
     category: z.string().min(1),
     date: z.string().min(1),
   })

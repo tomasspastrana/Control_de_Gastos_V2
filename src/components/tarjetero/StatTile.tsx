@@ -9,7 +9,7 @@ interface Props {
 
 export function StatTile({ label, value, valueColor, big = false }: Props) {
   return (
-    <div className="tj-glass" style={{ padding: "20px 22px", borderRadius: 22 }}>
+    <div className="tj-glass tj-tile" style={{ padding: "20px 22px", borderRadius: 22 }}>
       <div style={{ fontSize: 12, color: "var(--tj-muted)", fontWeight: 600, marginBottom: 8 }}>{label}</div>
       <div
         style={{

@@ -10,6 +10,7 @@ import {
   fmtCur,
   fmtDate,
   fmtShort,
+  purchaseTotalArs,
   totals,
 } from "@/lib/calc";
 import { CreditCardVisual } from "./CreditCardVisual";
@@ -89,7 +90,7 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard 
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, letterSpacing: "-.02em" }}>Tarjetas</h2>
-            <button onClick={onAddCard} style={{ border: "none", background: "rgba(109,94,246,.1)", color: "var(--tj-accent)", fontWeight: 700, fontSize: 12, padding: "7px 13px", borderRadius: 11, cursor: "pointer" }}>+ Agregar</button>
+            <button onClick={onAddCard} className="tj-cta" style={{ border: "none", background: "rgba(109,94,246,.1)", color: "var(--tj-accent)", fontWeight: 700, fontSize: 12, padding: "7px 13px", borderRadius: 11, cursor: "pointer" }}>+ Agregar</button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 18 }}>
             {data.cards.map((c) => (
@@ -129,14 +130,14 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard 
             <h2 style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 800, letterSpacing: "-.02em" }}>Compras recientes</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {recent.map((r) => (
-                <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 6px", borderRadius: 12 }}>
+                <div key={r.id} className="tj-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 6px" }}>
                   <span style={{ width: 10, height: 10, borderRadius: 3, flex: "none", background: catColor(r.category) }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.merchant}</div>
                     <div style={{ fontSize: 11, color: "var(--tj-muted)", fontWeight: 600 }}>{cardName(r.cardId)} · {fmtDate(r.date)}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{fmt(r.amount * (data.rates[r.currency] || 1))}</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{fmt(purchaseTotalArs(r, data.rates))}</div>
                     <div style={{ fontSize: 10.5, color: "var(--tj-muted)", fontWeight: 600 }}>{fmtCur(r.amount, r.currency)}</div>
                   </div>
                 </div>

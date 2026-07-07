@@ -92,9 +92,22 @@ export interface CardMetrics {
   count: number;
 }
 
+/**
+ * Total amount (in ARS) that a purchase commits to the card limit.
+ * If the real installment value is set (which already includes bank interest),
+ * total = installmentValue × installments; otherwise it falls back to the price.
+ */
+export function purchaseTotalArs(p: Purchase, rates: Rates): number {
+  const base =
+    p.installmentValue && p.installmentValue > 0
+      ? p.installmentValue * p.installments
+      : p.amount;
+  return base * rate(rates, p.currency);
+}
+
 /** Remaining debt (in ARS) of a single purchase given its installment progress. */
 export function purchaseRemaining(p: Purchase, rates: Rates): number {
-  const tot = p.amount * rate(rates, p.currency);
+  const tot = purchaseTotalArs(p, rates);
   return (tot * (p.installments - p.paidInstallments)) / (p.installments || 1);
 }
 
@@ -159,7 +172,7 @@ export function categoryBreakdown(
 ): CategoryBreakdown {
   const map: Record<string, number> = {};
   purchases.forEach((p) => {
-    const tot = p.amount * rate(rates, p.currency);
+    const tot = purchaseTotalArs(p, rates);
     map[p.category] = (map[p.category] || 0) + tot;
   });
   const raw = Object.keys(map)

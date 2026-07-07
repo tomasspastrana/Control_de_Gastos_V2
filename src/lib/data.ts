@@ -30,6 +30,7 @@ function toPurchase(r: PurchaseRow): Purchase {
     currency: r.currency,
     installments: r.installments,
     paidInstallments: r.paidInstallments,
+    installmentValue: r.installmentValue ?? undefined,
     category: r.category,
     date: r.date,
   };

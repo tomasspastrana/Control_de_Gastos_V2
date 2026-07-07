@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import type { Card, Purchase, Rates } from "@/lib/types";
-import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, rate } from "@/lib/calc";
+import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseTotalArs } from "@/lib/calc";
 import { CreditCardVisual } from "./CreditCardVisual";
 import { ProgressBar } from "./ProgressBar";
 import { InstallmentDots } from "./InstallmentDots";
@@ -59,7 +59,7 @@ export function CardDetail({ card, purchases, rates, onBack, onAddPurchase, onDe
         <div>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="m-0 text-[19px] font-extrabold tracking-tight">Compras · {card.nickname}</h2>
-            <button onClick={onAddPurchase} className="cursor-pointer rounded-[13px] border-none px-4 py-2.5 text-[12.5px] font-bold text-white" style={{ background: "var(--tj-grad)", boxShadow: "0 8px 18px rgba(109,94,246,.32)" }}>
+            <button onClick={onAddPurchase} className="tj-cta cursor-pointer rounded-[13px] border-none px-4 py-2.5 text-[12.5px] font-bold text-white" style={{ background: "var(--tj-grad)", boxShadow: "0 8px 18px rgba(109,94,246,.32)" }}>
               + Cargar compra
             </button>
           </div>
@@ -68,7 +68,7 @@ export function CardDetail({ card, purchases, rates, onBack, onAddPurchase, onDe
             <div className="flex flex-col gap-3.5">
               <AnimatePresence initial={false}>
                 {ps.map((p) => {
-                  const tot = p.amount * rate(rates, p.currency);
+                  const tot = purchaseTotalArs(p, rates);
                   const per = tot / p.installments;
                   const rem = (tot * (p.installments - p.paidInstallments)) / p.installments;
                   return (

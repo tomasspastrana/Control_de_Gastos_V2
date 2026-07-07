@@ -56,16 +56,16 @@ export function Sidebar({ cards, purchases, rates, view, selectedCardId, debtsCo
       </div>
 
       {/* primary action */}
-      <button onClick={onAddPurchase} style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 15px", border: "none", borderRadius: 16, background: "var(--tj-grad)", color: "#fff", fontWeight: 700, fontSize: 13.5, cursor: "pointer", boxShadow: "0 10px 24px rgba(109,94,246,.38)" }}>
+      <button onClick={onAddPurchase} className="tj-cta" style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 15px", border: "none", borderRadius: 16, background: "var(--tj-grad)", color: "#fff", fontWeight: 700, fontSize: 13.5, cursor: "pointer", boxShadow: "0 10px 24px rgba(109,94,246,.38)" }}>
         <span style={{ width: 22, height: 22, borderRadius: 8, background: "rgba(255,255,255,.25)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 400, lineHeight: 1 }}>+</span>
         Cargar compra
       </button>
 
       {/* nav */}
-      <button onClick={onGoHome} style={{ ...navBase, ...(view === "dashboard" ? navActive : {}) }}>
+      <button onClick={onGoHome} className="tj-sidebtn" style={{ ...navBase, ...(view === "dashboard" ? navActive : {}) }}>
         <span style={{ width: 20, height: 20, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>◧</span> Inicio
       </button>
-      <button onClick={onGoDebts} style={{ ...navBase, ...(view === "debts" ? navActive : {}) }}>
+      <button onClick={onGoDebts} className="tj-sidebtn" style={{ ...navBase, ...(view === "debts" ? navActive : {}) }}>
         <span style={{ width: 20, height: 20, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🤝</span> Deudas personales
         {debtsCount > 0 && (
           <span style={{ marginLeft: "auto", background: "rgba(109,94,246,.14)", color: "var(--tj-accent)", fontSize: 10.5, fontWeight: 800, padding: "2px 8px", borderRadius: 20 }}>{debtsCount}</span>
@@ -84,6 +84,7 @@ export function Sidebar({ cards, purchases, rates, view, selectedCardId, debtsCo
             <button
               key={c.id}
               onClick={() => onOpenCard(c.id)}
+              className="tj-sidebtn"
               style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", border: "none", borderRadius: 13, cursor: "pointer", background: active ? "rgba(255,255,255,.7)" : "transparent", boxShadow: active ? "0 4px 14px rgba(80,70,160,.12)" : "none" }}
             >
               <span style={{ width: 12, height: 12, borderRadius: 4, flex: "none", background: `linear-gradient(135deg,${a},${b})` }} />
@@ -96,10 +97,10 @@ export function Sidebar({ cards, purchases, rates, view, selectedCardId, debtsCo
         })}
       </div>
 
-      <button onClick={onAddCard} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 11, border: "1.5px dashed rgba(109,94,246,.4)", borderRadius: 14, background: "rgba(255,255,255,.35)", color: "var(--tj-accent)", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>
+      <button onClick={onAddCard} className="tj-sidebtn" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: 11, border: "1.5px dashed rgba(109,94,246,.4)", borderRadius: 14, background: "rgba(255,255,255,.35)", color: "var(--tj-accent)", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>
         + Nueva tarjeta
       </button>
-      <button onClick={onOpenSettings} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 15px", border: "none", borderRadius: 14, background: "transparent", color: "var(--tj-muted-2)", fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}>
+      <button onClick={onOpenSettings} className="tj-sidebtn" style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 15px", border: "none", borderRadius: 14, background: "transparent", color: "var(--tj-muted-2)", fontWeight: 600, fontSize: 12.5, cursor: "pointer" }}>
         ⚙ Ajustes · Tipo de cambio
       </button>
 

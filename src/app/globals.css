@@ -215,6 +215,56 @@ body {
   animation: tj-popin 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
+/* ---- micro-interactions (hovers & press feedback) ---- */
+button:not(:disabled) {
+  transition: transform 0.12s ease, box-shadow 0.16s ease, background-color 0.16s ease, filter 0.16s ease, opacity 0.16s ease;
+}
+button:not(:disabled):active {
+  transform: translateY(0) scale(0.97);
+}
+.tj-input,
+[data-slot="select-trigger"] {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+/* primary gradient CTA */
+.tj-cta {
+  transition: transform 0.13s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+.tj-cta:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+.tj-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 32px rgba(109, 94, 246, 0.46);
+}
+/* glass tiles gently lift */
+.tj-tile {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.tj-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 36px rgba(80, 70, 160, 0.16);
+}
+/* list rows highlight on hover */
+.tj-row {
+  border-radius: 12px;
+  transition: background-color 0.15s ease;
+}
+.tj-row:hover {
+  background: rgba(109, 94, 246, 0.07);
+}
+/* sidebar items nudge on hover (transform doesn't fight inline bg) */
+.tj-sidebtn {
+  transition: transform 0.14s ease, box-shadow 0.16s ease;
+}
+.tj-sidebtn:hover {
+  transform: translateX(3px);
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
 @media (max-width: 1100px) {
   .tj-dashgrid {
     grid-template-columns: 1fr !important;

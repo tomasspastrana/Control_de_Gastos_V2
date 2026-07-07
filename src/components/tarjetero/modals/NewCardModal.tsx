@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { TjSelect } from "../TjSelect";
 import { cardSchema } from "@/lib/schemas";
 import { uid } from "@/lib/id";
 import { themeColors } from "@/lib/calc";
@@ -114,11 +115,11 @@ export function NewCardModal({ open, onClose, onCreate, initialTheme }: Props) {
             </div>
             <div className="tj-field flex-1">
               <label className="tj-label">Moneda del límite</label>
-              <select className="tj-input" value={f.limitCurrency} onChange={(e) => set("limitCurrency", e.target.value as Card["limitCurrency"])}>
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c === "ARS" ? "ARS $" : c}</option>
-                ))}
-              </select>
+              <TjSelect
+                value={f.limitCurrency}
+                onChange={(v) => set("limitCurrency", v as Card["limitCurrency"])}
+                options={CURRENCIES.map((c) => ({ value: c, label: c === "ARS" ? "ARS $" : c }))}
+              />
             </div>
           </div>
 

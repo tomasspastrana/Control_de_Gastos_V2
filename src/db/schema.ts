@@ -41,6 +41,7 @@ export const purchases = pgTable("purchases", {
   currency: currencyEnum("currency").notNull().default("ARS"),
   installments: integer("installments").notNull().default(1),
   paidInstallments: integer("paid_installments").notNull().default(0),
+  installmentValue: numeric("installment_value", { precision: 14, scale: 2, mode: "number" }),
   category: text("category").notNull().default("Otros"),
   date: date("date", { mode: "string" }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
