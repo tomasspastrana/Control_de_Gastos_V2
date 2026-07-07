@@ -72,7 +72,7 @@ export function Sidebar({ cards, purchases, rates, view, selectedCardId, debtsCo
         )}
       </button>
 
-      <div style={{ marginTop: 6, padding: "0 8px", fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", color: "#9a96b6", textTransform: "uppercase" }}>Mis tarjetas</div>
+      <div className="tj-sec-label" style={{ marginTop: 6, padding: "0 8px", fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", color: "#9a96b6", textTransform: "uppercase" }}>Mis tarjetas</div>
 
       {/* card list */}
       <div className="tj-sidecards" style={{ display: "flex", flexDirection: "column", gap: 6, overflowY: "auto", flex: 1, paddingRight: 2 }}>
@@ -105,7 +105,7 @@ export function Sidebar({ cards, purchases, rates, view, selectedCardId, debtsCo
       </button>
 
       {/* session footer */}
-      <div style={{ borderTop: "1px solid rgba(120,110,180,.18)", paddingTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="tj-session" style={{ borderTop: "1px solid rgba(120,110,180,.18)", paddingTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 10, color: "#9a96b6", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>Sesión</div>
           <div style={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={userEmail}>{userEmail}</div>

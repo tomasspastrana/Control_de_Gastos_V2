@@ -17,7 +17,7 @@ interface Props {
 /** Select that matches the app's glass/violet design (wraps the Base UI primitive). */
 export function TjSelect({ value, onChange, options, placeholder }: Props) {
   return (
-    <Select value={value} onValueChange={(v) => onChange(v as string)}>
+    <Select items={options} value={value} onValueChange={(v) => onChange(v as string)}>
       <SelectTrigger className="h-auto w-full justify-between rounded-[13px] border-[#c7c0e6] bg-white/70 px-[13px] py-[11px] text-[14px] font-semibold text-[#26233a] shadow-none focus-visible:border-[#6d5ef6] focus-visible:ring-[#6d5ef6]/20 data-[popup-open]:border-[#6d5ef6]">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>

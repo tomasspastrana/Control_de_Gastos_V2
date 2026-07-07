@@ -68,13 +68,13 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard 
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.32, ease: [0.2, 0.8, 0.2, 1] }}>
       {/* header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 16, marginBottom: 24 }}>
-        <div>
+        <div style={{ minWidth: 0, maxWidth: "100%" }}>
           <div style={{ fontSize: 12.5, color: "var(--tj-muted)", fontWeight: 600, letterSpacing: ".02em" }}>Resumen general</div>
-          <h1 style={{ margin: "2px 0 0", fontSize: 30, fontWeight: 800, letterSpacing: "-.03em" }}>Hola, {userName || "qué tal"} 👋</h1>
+          <h1 style={{ margin: "2px 0 0", fontSize: "clamp(22px, 6vw, 30px)", fontWeight: 800, letterSpacing: "-.03em", overflowWrap: "anywhere" }}>Hola, {userName || "qué tal"} 👋</h1>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 11.5, color: "var(--tj-muted)", fontWeight: 600 }}>Deuda total (ARS)</div>
-          <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-.02em", color: "var(--tj-debt)", fontVariantNumeric: "tabular-nums" }}>{fmt(t.debt)}</div>
+          <div style={{ fontSize: "clamp(24px, 7vw, 30px)", fontWeight: 800, letterSpacing: "-.02em", color: "var(--tj-debt)", fontVariantNumeric: "tabular-nums" }}>{fmt(t.debt)}</div>
         </div>
       </div>
 

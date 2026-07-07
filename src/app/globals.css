@@ -135,6 +135,9 @@
 :root {
   --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
 
+  /* shared smooth easing (gentle ease-out, no overshoot) */
+  --tj-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
   /* brand */
   --tj-accent: #6d5ef6;
   --tj-grad: linear-gradient(135deg, var(--tj-accent), #a99cfb);
@@ -151,9 +154,30 @@
     linear-gradient(180deg, #f3f1fc, #ebe9f8);
 }
 
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
 body {
   color: var(--tj-ink);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* nicer feel on touch: no grey tap flash, no rubber-band bleed */
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* main content area (padding lives here so mobile can shrink it) */
+.tj-main {
+  padding: 30px 34px 60px;
+  min-width: 0;
+  overflow-x: hidden;
+}
+@media (max-width: 640px) {
+  .tj-main {
+    padding: 18px 16px calc(44px + env(safe-area-inset-bottom));
+  }
 }
 
 /* glassmorphism surface */
@@ -189,11 +213,31 @@ body {
     position: sticky;
     top: 0;
     flex-direction: row !important;
+    align-items: center;
     height: auto !important;
+    gap: 10px !important;
+    padding: 10px 14px calc(10px + env(safe-area-inset-top)) !important;
     overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
     z-index: 20;
+    /* frosted top bar so content scrolls under it cleanly */
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.6);
   }
-  .tj-sidecards {
+  .tj-side::-webkit-scrollbar {
+    display: none;
+  }
+  .tj-side > button {
+    flex: none;
+    white-space: nowrap;
+  }
+  /* declutter the horizontal bar: drop section label + session block */
+  .tj-sidecards,
+  .tj-sec-label,
+  .tj-session {
     display: none !important;
   }
 }
@@ -212,54 +256,68 @@ body {
   to { opacity: 1; transform: none; }
 }
 .tj-pop {
-  animation: tj-popin 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: tj-popin 0.34s var(--tj-ease) both;
 }
 
 /* ---- micro-interactions (hovers & press feedback) ---- */
 button:not(:disabled) {
-  transition: transform 0.12s ease, box-shadow 0.16s ease, background-color 0.16s ease, filter 0.16s ease, opacity 0.16s ease;
+  transition: transform 0.22s var(--tj-ease), box-shadow 0.22s var(--tj-ease), background-color 0.2s var(--tj-ease), filter 0.2s var(--tj-ease), opacity 0.2s var(--tj-ease);
 }
 button:not(:disabled):active {
-  transform: translateY(0) scale(0.97);
+  transform: translateY(0) scale(0.96);
+  transition-duration: 0.08s;
 }
 .tj-input,
 [data-slot="select-trigger"] {
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  transition: border-color 0.2s var(--tj-ease), box-shadow 0.2s var(--tj-ease), background-color 0.2s var(--tj-ease);
 }
 /* primary gradient CTA */
 .tj-cta {
-  transition: transform 0.13s ease, box-shadow 0.18s ease, filter 0.18s ease;
+  transition: transform 0.24s var(--tj-ease), box-shadow 0.26s var(--tj-ease), filter 0.24s var(--tj-ease);
 }
 .tj-cta:hover {
-  transform: translateY(-1px);
+  transform: translateY(-1.5px);
   filter: brightness(1.05);
 }
+.tj-submit {
+  transition: transform 0.24s var(--tj-ease), box-shadow 0.26s var(--tj-ease), filter 0.24s var(--tj-ease);
+}
 .tj-submit:hover:not(:disabled) {
-  transform: translateY(-1px);
+  transform: translateY(-1.5px);
   box-shadow: 0 16px 32px rgba(109, 94, 246, 0.46);
 }
 /* glass tiles gently lift */
 .tj-tile {
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  transition: transform 0.28s var(--tj-ease), box-shadow 0.28s var(--tj-ease);
 }
 .tj-tile:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 36px rgba(80, 70, 160, 0.16);
+  transform: translateY(-3px);
+  box-shadow: 0 16px 40px rgba(80, 70, 160, 0.17);
 }
 /* list rows highlight on hover */
 .tj-row {
   border-radius: 12px;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.2s var(--tj-ease);
 }
 .tj-row:hover {
   background: rgba(109, 94, 246, 0.07);
 }
 /* sidebar items nudge on hover (transform doesn't fight inline bg) */
 .tj-sidebtn {
-  transition: transform 0.14s ease, box-shadow 0.16s ease;
+  transition: transform 0.24s var(--tj-ease), box-shadow 0.24s var(--tj-ease), background-color 0.24s var(--tj-ease);
 }
 .tj-sidebtn:hover {
   transform: translateX(3px);
+}
+/* hover lift is a pointer affordance — disable on touch so it doesn't stick after a tap */
+@media (hover: none) {
+  .tj-cta:hover,
+  .tj-submit:hover,
+  .tj-tile:hover,
+  .tj-sidebtn:hover {
+    transform: none;
+    filter: none;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
@@ -311,12 +369,32 @@ button:not(:disabled):active {
   max-width: 460px;
   max-height: 90vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   border-radius: 26px;
   padding: 26px;
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(30px) saturate(1.6);
   -webkit-backdrop-filter: blur(30px) saturate(1.6);
   box-shadow: 0 30px 80px rgba(60, 50, 120, 0.28);
+}
+@media (max-width: 640px) {
+  .tj-modal {
+    /* full-width sheet with a small margin, roomier scroll area */
+    max-width: calc(100vw - 24px);
+    max-height: 88vh;
+    padding: 20px 18px;
+    border-radius: 22px;
+  }
+}
+
+/* Smoother, less snappy open/close for Base UI dialog + select popups.
+   (tw-animate runs these as keyframe animations at 100ms — soften them.) */
+[data-slot="dialog-content"],
+[data-slot="dialog-overlay"],
+[data-slot="select-content"] {
+  animation-duration: 0.26s !important;
+  animation-timing-function: var(--tj-ease) !important;
 }
 .tj-submit {
   width: 100%;
