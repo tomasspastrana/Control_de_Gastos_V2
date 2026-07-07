@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TjSelect } from "../TjSelect";
-import { purchaseSchema } from "@/lib/schemas";
+import { purchaseSchema, toAmount } from "@/lib/schemas";
 import { uid } from "@/lib/id";
 import { fmt, rate } from "@/lib/calc";
 import { CATEGORIES, CURRENCIES, type Card, type Currency, type Purchase, type Rates } from "@/lib/types";
@@ -22,7 +22,7 @@ const emptyForm = (cardId: string) => ({
   cardId,
   merchant: "",
   amount: "",
-  currency: "USD" as Currency,
+  currency: "ARS" as Currency,
   installments: "3",
   paidInstallments: "0",
   category: "Tecnología" as string,
@@ -39,7 +39,7 @@ export function NewPurchaseModal({ open, onClose, onCreate, cards, rates, defaul
   const set = <K extends keyof ReturnType<typeof emptyForm>>(k: K, v: (typeof f)[K]) =>
     setF((prev) => ({ ...prev, [k]: v }));
 
-  const preview = fmt((parseFloat(f.amount) || 0) * rate(rates, f.currency));
+  const preview = fmt(toAmount(f.amount) * rate(rates, f.currency));
   const hasCards = cards.length > 0;
 
   function submit() {
@@ -89,7 +89,7 @@ export function NewPurchaseModal({ open, onClose, onCreate, cards, rates, defaul
             <div className="flex gap-3">
               <div className="tj-field" style={{ flex: 1.5 }}>
                 <label className="tj-label">Monto</label>
-                <input className="tj-input" value={f.amount} inputMode="decimal" onChange={(e) => set("amount", e.target.value.replace(/[^\d.]/g, ""))} placeholder="1200" />
+                <input className="tj-input" value={f.amount} inputMode="decimal" onChange={(e) => set("amount", e.target.value.replace(/[^\d.,]/g, ""))} placeholder="1200" />
               </div>
               <div className="tj-field flex-1">
                 <label className="tj-label">Moneda</label>

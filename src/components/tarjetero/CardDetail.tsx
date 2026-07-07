@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import type { Card, Purchase, Rates } from "@/lib/types";
-import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, rate } from "@/lib/calc";
+import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseInstallment, rate } from "@/lib/calc";
 import { updateCardClosing } from "@/app/actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CreditCardVisual } from "./CreditCardVisual";
@@ -83,9 +83,9 @@ export function CardDetail({ card, purchases, rates, onBack, onAddPurchase, onDe
             </div>
           </div>
 
-          {m.debt > 0.5 && (
+          {m.monthly > 0.5 && (
             <button onClick={onPayAll} className="flex cursor-pointer items-center justify-center gap-2 rounded-[15px] border-none p-[13px] text-[13.5px] font-extrabold text-white" style={{ background: "#1c1c22", boxShadow: "0 10px 24px rgba(28,28,34,.28)" }}>
-              ✓ Pagar tarjeta · {fmt(m.debt)}
+              ✓ Pagar tarjeta · {fmt(m.monthly)}
             </button>
           )}
           <button onClick={onDeleteCard} className="cursor-pointer rounded-[14px] p-[11px] text-[12.5px] font-bold" style={{ border: "1px solid rgba(214,69,90,.3)", background: "rgba(214,69,90,.06)", color: "var(--tj-danger)" }}>
@@ -107,7 +107,7 @@ export function CardDetail({ card, purchases, rates, onBack, onAddPurchase, onDe
               <AnimatePresence initial={false}>
                 {ps.map((p) => {
                   const tot = p.amount * rate(rates, p.currency);
-                  const per = tot / p.installments;
+                  const per = purchaseInstallment(p, rates);
                   const rem = (tot * (p.installments - p.paidInstallments)) / p.installments;
                   return (
                     <motion.div

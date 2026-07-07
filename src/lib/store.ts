@@ -50,10 +50,13 @@ export function reducer(state: AppData, action: Action): AppData {
       };
 
     case "PAY_CARD":
+      // pay this month's bill: advance one installment on each purchase of the card
       return {
         ...state,
         purchases: state.purchases.map((p) =>
-          p.cardId === action.cardId ? { ...p, paidInstallments: p.installments } : p,
+          p.cardId === action.cardId
+            ? { ...p, paidInstallments: clamp(p.paidInstallments + 1, 0, p.installments) }
+            : p,
         ),
       };
 

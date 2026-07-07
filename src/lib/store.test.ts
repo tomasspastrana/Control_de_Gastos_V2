@@ -42,9 +42,14 @@ describe("reducer", () => {
     expect(paid(s)).toBe(0);
   });
 
-  it("PAY_CARD marks all its purchases fully paid", () => {
+  it("PAY_CARD advances one installment per purchase (this month's bill), clamped", () => {
+    // 2/6 → 3/6 after paying the card once
     const s = reducer(base(), { type: "PAY_CARD", cardId: "c1" });
-    expect(s.purchases[0].paidInstallments).toBe(6);
+    expect(s.purchases[0].paidInstallments).toBe(3);
+    // never exceeds the total number of installments
+    let f = base();
+    for (let i = 0; i < 10; i++) f = reducer(f, { type: "PAY_CARD", cardId: "c1" });
+    expect(f.purchases[0].paidInstallments).toBe(6);
   });
 
   it("debt actions: add, delete, clamped pay", () => {

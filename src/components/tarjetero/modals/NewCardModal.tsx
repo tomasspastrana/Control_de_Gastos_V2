@@ -142,7 +142,7 @@ export function NewCardModal({ open, onClose, onCreate, initialTheme }: Props) {
           <div className="mt-2 flex gap-3">
             <div className="tj-field" style={{ flex: 1.4 }}>
               <label className="tj-label">Límite</label>
-              <input className="tj-input" value={f.limit} inputMode="numeric" onChange={(e) => set("limit", e.target.value.replace(/[^\d.]/g, ""))} placeholder="800000" />
+              <input className="tj-input" value={f.limit} inputMode="decimal" onChange={(e) => set("limit", e.target.value.replace(/[^\d.,]/g, ""))} placeholder="800000" />
             </div>
             <div className="tj-field flex-1">
               <label className="tj-label">Moneda del límite</label>

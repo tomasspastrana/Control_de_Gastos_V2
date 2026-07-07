@@ -108,9 +108,12 @@ export async function payPurchaseDelta(id: string, delta: number) {
 
 export async function payCard(cardId: string) {
   const userId = await requireUserId();
+  // pay this month's bill: advance one installment on each purchase of the card
   await db
     .update(purchases)
-    .set({ paidInstallments: sql`${purchases.installments}` })
+    .set({
+      paidInstallments: sql`least(${purchases.installments}, ${purchases.paidInstallments} + 1)`,
+    })
     .where(and(eq(purchases.cardId, cardId), eq(purchases.userId, userId)));
   done();
 }

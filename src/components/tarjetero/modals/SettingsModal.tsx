@@ -46,11 +46,11 @@ export function SettingsModal({ open, onClose, rates, onSave }: Props) {
         </div>
         <div className="tj-field">
           <label className="tj-label">1 USD equivale a (ARS)</label>
-          <input className="tj-input" value={usd} inputMode="decimal" onChange={(e) => setUsd(e.target.value.replace(/[^\d.]/g, ""))} />
+          <input className="tj-input" value={usd} inputMode="decimal" onChange={(e) => setUsd(e.target.value.replace(/[^\d.,]/g, ""))} />
         </div>
         <div className="tj-field">
           <label className="tj-label">1 EUR equivale a (ARS)</label>
-          <input className="tj-input" value={eur} inputMode="decimal" onChange={(e) => setEur(e.target.value.replace(/[^\d.]/g, ""))} />
+          <input className="tj-input" value={eur} inputMode="decimal" onChange={(e) => setEur(e.target.value.replace(/[^\d.,]/g, ""))} />
         </div>
         <button onClick={submit} className="tj-submit mt-2.5">Guardar</button>
       </DialogContent>

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TjSelect } from "../TjSelect";
-import { debtSchema } from "@/lib/schemas";
+import { debtSchema, toAmount } from "@/lib/schemas";
 import { uid } from "@/lib/id";
 import { fmt, rate } from "@/lib/calc";
 import { CURRENCIES, type Currency, type Debt, type Rates } from "@/lib/types";
@@ -35,7 +35,7 @@ export function NewDebtModal({ open, onClose, onCreate, rates }: Props) {
   const set = <K extends keyof ReturnType<typeof emptyForm>>(k: K, v: (typeof f)[K]) =>
     setF((prev) => ({ ...prev, [k]: v }));
 
-  const preview = fmt((parseFloat(f.amount) || 0) * rate(rates, f.currency));
+  const preview = fmt(toAmount(f.amount) * rate(rates, f.currency));
 
   function submit() {
     const parsed = debtSchema.safeParse(f);
@@ -78,7 +78,7 @@ export function NewDebtModal({ open, onClose, onCreate, rates }: Props) {
         <div className="flex gap-3">
           <div className="tj-field" style={{ flex: 1.5 }}>
             <label className="tj-label">Monto</label>
-            <input className="tj-input" value={f.amount} inputMode="decimal" onChange={(e) => set("amount", e.target.value.replace(/[^\d.]/g, ""))} placeholder="1000" />
+            <input className="tj-input" value={f.amount} inputMode="decimal" onChange={(e) => set("amount", e.target.value.replace(/[^\d.,]/g, ""))} placeholder="1000" />
           </div>
           <div className="tj-field flex-1">
             <label className="tj-label">Moneda</label>

@@ -90,6 +90,13 @@ export interface CardMetrics {
   avail: number;
   pct: number;
   count: number;
+  monthly: number;
+}
+
+/** Amount (in ARS) of a single installment of a purchase. */
+export function purchaseInstallment(p: Purchase, rates: Rates): number {
+  const tot = p.amount * rate(rates, p.currency);
+  return tot / (p.installments || 1);
 }
 
 /** Remaining debt (in ARS) of a single purchase given its installment progress. */
@@ -106,13 +113,18 @@ export function cardMetrics(
 ): CardMetrics {
   const ps = purchases.filter((p) => p.cardId === card.id);
   let debt = 0;
+  let monthly = 0;
   ps.forEach((p) => {
     debt += purchaseRemaining(p, rates);
+    // this month's bill: one installment per purchase that still owes
+    if (p.paidInstallments < p.installments) {
+      monthly += purchaseInstallment(p, rates);
+    }
   });
   const limit = card.limit * rate(rates, card.limitCurrency || "ARS");
   const avail = limit - debt;
   const pct = limit > 0 ? Math.min(1, debt / limit) : 0;
-  return { debt, limit, avail, pct, count: ps.length };
+  return { debt, limit, avail, pct, count: ps.length, monthly };
 }
 
 export interface Totals {

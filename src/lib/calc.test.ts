@@ -53,6 +53,18 @@ describe("cardMetrics", () => {
     expect(m.pct).toBeCloseTo(0.75);
     expect(m.count).toBe(1);
   });
+  it("sums one installment per still-owing purchase into monthly", () => {
+    const m = cardMetrics(
+      card,
+      [
+        p({ id: "a" }), // 1,000,000 / 12 = 83,333.33
+        p({ id: "b", amount: 600, installments: 6 }), // 600,000 / 6 = 100,000
+        p({ id: "c", paidInstallments: 12 }), // fully paid → excluded
+      ],
+      rates,
+    );
+    expect(m.monthly).toBeCloseTo(1_000_000 / 12 + 100_000);
+  });
   it("caps pct at 1 when over limit", () => {
     const m = cardMetrics(card, [p({ amount: 5000 })], rates); // 5,000,000 total
     expect(m.pct).toBe(1);
