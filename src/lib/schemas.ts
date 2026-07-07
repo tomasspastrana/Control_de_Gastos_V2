@@ -96,6 +96,16 @@ export const debtSchema = z
   }));
 export type DebtInput = z.input<typeof debtSchema>;
 
+export const fixedExpenseSchema = z.object({
+  name: z.string().trim().min(1, "Poné un nombre para el gasto"),
+  amount: positiveAmount("El monto debe ser mayor a 0"),
+  currency: currencyEnum,
+  category: z.string().min(1).default("Otros"),
+  cardId: z.string().trim().nullish(),
+  active: z.boolean().default(true),
+});
+export type FixedExpenseInput = z.input<typeof fixedExpenseSchema>;
+
 export const ratesSchema = z.object({
   usd: z.preprocess(normalizeAmount, z.coerce.number().min(0)),
   eur: z.preprocess(normalizeAmount, z.coerce.number().min(0)),

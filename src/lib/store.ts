@@ -1,7 +1,7 @@
 // Pure reducer for the Tarjetero domain data.
 // Kept side-effect-free so it's easy to unit-test and, in Fase 5, mirror on the server.
 
-import type { AppData, Card, Debt, Purchase, Rates } from "./types";
+import type { AppData, Card, Debt, FixedExpense, Purchase, Rates } from "./types";
 
 export type Action =
   | { type: "HYDRATE"; data: AppData }
@@ -14,6 +14,10 @@ export type Action =
   | { type: "ADD_DEBT"; debt: Debt }
   | { type: "DELETE_DEBT"; id: string }
   | { type: "PAY_DEBT_DELTA"; id: string; delta: number }
+  | { type: "ADD_FIXED"; fixed: FixedExpense }
+  | { type: "EDIT_FIXED"; id: string; patch: Partial<FixedExpense> }
+  | { type: "DELETE_FIXED"; id: string }
+  | { type: "TOGGLE_FIXED"; id: string }
   | { type: "SET_RATES"; rates: Partial<Rates> };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -31,6 +35,8 @@ export function reducer(state: AppData, action: Action): AppData {
         ...state,
         cards: state.cards.filter((c) => c.id !== action.id),
         purchases: state.purchases.filter((p) => p.cardId !== action.id),
+        // card-linked fixed expenses cascade away with the card
+        fixedExpenses: state.fixedExpenses.filter((f) => f.cardId !== action.id),
       };
 
     case "ADD_PURCHASE":
@@ -73,6 +79,28 @@ export function reducer(state: AppData, action: Action): AppData {
           d.id === action.id
             ? { ...d, paidInstallments: clamp(d.paidInstallments + action.delta, 0, d.installments) }
             : d,
+        ),
+      };
+
+    case "ADD_FIXED":
+      return { ...state, fixedExpenses: [...state.fixedExpenses, action.fixed] };
+
+    case "EDIT_FIXED":
+      return {
+        ...state,
+        fixedExpenses: state.fixedExpenses.map((f) =>
+          f.id === action.id ? { ...f, ...action.patch } : f,
+        ),
+      };
+
+    case "DELETE_FIXED":
+      return { ...state, fixedExpenses: state.fixedExpenses.filter((f) => f.id !== action.id) };
+
+    case "TOGGLE_FIXED":
+      return {
+        ...state,
+        fixedExpenses: state.fixedExpenses.map((f) =>
+          f.id === action.id ? { ...f, active: !f.active } : f,
         ),
       };
 

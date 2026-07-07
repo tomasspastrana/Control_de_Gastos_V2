@@ -25,11 +25,17 @@ alter table public.debts
   add constraint debts_user_id_fkey foreign key (user_id)
     references auth.users (id) on delete cascade;
 
+alter table public.fixed_expenses
+  drop constraint if exists fixed_expenses_user_id_fkey,
+  add constraint fixed_expenses_user_id_fkey foreign key (user_id)
+    references auth.users (id) on delete cascade;
+
 -- 2) Enable Row Level Security --------------------------------
-alter table public.profiles  enable row level security;
-alter table public.cards     enable row level security;
-alter table public.purchases enable row level security;
-alter table public.debts     enable row level security;
+alter table public.profiles       enable row level security;
+alter table public.cards          enable row level security;
+alter table public.purchases      enable row level security;
+alter table public.debts          enable row level security;
+alter table public.fixed_expenses enable row level security;
 
 -- 3) Policies: each user can only touch their own rows --------
 -- profiles: keyed by id (= auth.uid())
@@ -44,7 +50,7 @@ create policy "profiles_update_own" on public.profiles
 do $$
 declare t text;
 begin
-  foreach t in array array['cards','purchases','debts'] loop
+  foreach t in array array['cards','purchases','debts','fixed_expenses'] loop
     execute format('drop policy if exists "%1$s_select_own" on public.%1$s', t);
     execute format('create policy "%1$s_select_own" on public.%1$s for select using (auth.uid() = user_id)', t);
     execute format('drop policy if exists "%1$s_insert_own" on public.%1$s', t);

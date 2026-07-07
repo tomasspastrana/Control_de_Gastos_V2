@@ -1,7 +1,7 @@
 // Business logic ported 1:1 from the prototype (reference/prototype.html).
 // Pure functions only — easy to unit-test and reuse on client & server.
 
-import type { Card, Currency, Purchase, Rates, ThemeName } from "./types";
+import type { Card, Currency, FixedExpense, Purchase, Rates, ThemeName } from "./types";
 
 // ---------- currency & formatting ----------
 export function rate(rates: Rates, c: Currency): number {
@@ -105,11 +105,20 @@ export function purchaseRemaining(p: Purchase, rates: Rates): number {
   return (tot * (p.installments - p.paidInstallments)) / (p.installments || 1);
 }
 
+/** Total ARS/month of the active fixed expenses in a list. */
+export function fixedMonthly(fixed: FixedExpense[], rates: Rates): number {
+  return fixed.reduce(
+    (s, f) => (f.active ? s + f.amount * rate(rates, f.currency) : s),
+    0,
+  );
+}
+
 /** Aggregate metrics for one card, in ARS. */
 export function cardMetrics(
   card: Card,
   purchases: Purchase[],
   rates: Rates,
+  fixed: FixedExpense[] = [],
 ): CardMetrics {
   const ps = purchases.filter((p) => p.cardId === card.id);
   let debt = 0;
@@ -121,6 +130,11 @@ export function cardMetrics(
       monthly += purchaseInstallment(p, rates);
     }
   });
+  // active fixed expenses charged to this card occupy one month of limit
+  // and are part of this month's bill
+  const fx = fixedMonthly(fixed.filter((f) => f.cardId === card.id), rates);
+  debt += fx;
+  monthly += fx;
   const limit = card.limit * rate(rates, card.limitCurrency || "ARS");
   const avail = limit - debt;
   const pct = limit > 0 ? Math.min(1, debt / limit) : 0;
@@ -137,12 +151,13 @@ export function totals(
   cards: Card[],
   purchases: Purchase[],
   rates: Rates,
+  fixed: FixedExpense[] = [],
 ): Totals {
   let debt = 0,
     limit = 0,
     avail = 0;
   cards.forEach((c) => {
-    const m = cardMetrics(c, purchases, rates);
+    const m = cardMetrics(c, purchases, rates, fixed);
     debt += m.debt;
     limit += m.limit;
     avail += m.avail;

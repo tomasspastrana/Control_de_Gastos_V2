@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   cardMetrics,
   categoryBreakdown,
+  fixedMonthly,
   purchaseRemaining,
   totals,
 } from "./calc";
-import type { Card, Purchase, Rates } from "./types";
+import type { Card, FixedExpense, Purchase, Rates } from "./types";
 
 const rates: Rates = { ARS: 1, USD: 1000, EUR: 1200 };
 
@@ -68,6 +69,46 @@ describe("cardMetrics", () => {
   it("caps pct at 1 when over limit", () => {
     const m = cardMetrics(card, [p({ amount: 5000 })], rates); // 5,000,000 total
     expect(m.pct).toBe(1);
+  });
+});
+
+const fx = (over: Partial<FixedExpense>): FixedExpense => ({
+  id: "f",
+  cardId: "c1",
+  name: "Sub",
+  amount: 20,
+  currency: "USD",
+  category: "Ocio",
+  active: true,
+  ...over,
+});
+
+describe("fixedMonthly", () => {
+  it("sums only active expenses, converted to ARS", () => {
+    const list = [
+      fx({ id: "a", amount: 20, currency: "USD" }), // 20,000
+      fx({ id: "b", amount: 5000, currency: "ARS" }), // 5,000
+      fx({ id: "c", amount: 100, currency: "USD", active: false }), // excluded
+    ];
+    expect(fixedMonthly(list, rates)).toBe(25_000);
+  });
+});
+
+describe("cardMetrics with fixed expenses", () => {
+  it("adds card-linked active expenses to debt and monthly, occupying limit", () => {
+    const m = cardMetrics(
+      card,
+      [p({ paidInstallments: 12 })], // fully paid → no purchase debt/monthly
+      rates,
+      [
+        fx({ id: "a", cardId: "c1", amount: 20, currency: "USD" }), // 20,000
+        fx({ id: "b", cardId: "other", amount: 999, currency: "USD" }), // other card
+        fx({ id: "c", cardId: "c1", amount: 10, currency: "USD", active: false }), // paused
+      ],
+    );
+    expect(m.debt).toBe(20_000);
+    expect(m.monthly).toBe(20_000);
+    expect(m.avail).toBe(1_000_000 - 20_000);
   });
 });
 

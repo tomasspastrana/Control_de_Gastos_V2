@@ -20,4 +20,5 @@ export const mockData: AppData = {
   debts: [
     { id: "d1", creditor: "Mi primo Juan", note: "Préstamo para la moto", amount: 1000, currency: "USD", installments: 12, paidInstallments: 3 },
   ],
+  fixedExpenses: [],
 };

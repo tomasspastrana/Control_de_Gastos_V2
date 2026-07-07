@@ -67,7 +67,22 @@ export const debts = pgTable("debts", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Recurring monthly charges (subscriptions, obra social, hosting, …).
+// cardId nullable: set = charged to that card (occupies its limit); null = standalone.
+export const fixedExpenses = pgTable("fixed_expenses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  cardId: uuid("card_id").references(() => cards.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  amount: numeric("amount", { precision: 14, scale: 2, mode: "number" }).notNull(),
+  currency: currencyEnum("currency").notNull().default("ARS"),
+  category: text("category").notNull().default("Otros"),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type ProfileRow = typeof profiles.$inferSelect;
 export type CardRow = typeof cards.$inferSelect;
 export type PurchaseRow = typeof purchases.$inferSelect;
 export type DebtRow = typeof debts.$inferSelect;
+export type FixedExpenseRow = typeof fixedExpenses.$inferSelect;

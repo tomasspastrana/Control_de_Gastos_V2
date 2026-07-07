@@ -6,6 +6,7 @@ import {
   cardMetrics,
   catColor,
   categoryBreakdown,
+  fixedMonthly,
   fmt,
   fmtCur,
   fmtDate,
@@ -24,10 +25,11 @@ interface Props {
   onAddCard: () => void;
   onOpenCard: (id: string) => void;
   onDeleteCard: (id: string) => void;
+  onGoDebts: () => void;
 }
 
 function DashCard({ card, data, onOpen, onDelete }: { card: Card; data: AppData; onOpen: () => void; onDelete: () => void }) {
-  const m = cardMetrics(card, data.purchases, data.rates);
+  const m = cardMetrics(card, data.purchases, data.rates, data.fixedExpenses);
   return (
     <div style={{ background: "rgba(255,255,255,.55)", borderRadius: 26, padding: 12, border: "1px solid rgba(255,255,255,.7)", boxShadow: "0 8px 30px rgba(80,70,160,.1)" }}>
       <motion.div whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 320, damping: 22 }} style={{ cursor: "pointer" }} onClick={onOpen}>
@@ -55,9 +57,10 @@ function DashCard({ card, data, onOpen, onDelete }: { card: Card; data: AppData;
   );
 }
 
-export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard }: Props) {
-  const t = totals(data.cards, data.purchases, data.rates);
+export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard, onGoDebts }: Props) {
+  const t = totals(data.cards, data.purchases, data.rates, data.fixedExpenses);
   const breakdown = categoryBreakdown(data.purchases, data.rates);
+  const fixedTotal = fixedMonthly(data.fixedExpenses, data.rates);
 
   const cardName = (id: string) => data.cards.find((c) => c.id === id)?.nickname ?? "—";
   const recent = [...data.purchases]
@@ -82,7 +85,13 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 16, marginBottom: 28 }}>
         <StatTile label="Límite total" value={fmt(t.limit)} />
         <StatTile label="Disponible total" value={fmt(t.avail)} valueColor="var(--tj-good)" />
-        <StatTile label="Tarjetas · Compras activas" value={`${data.cards.length} · ${data.purchases.length}`} />
+        {fixedTotal > 0.5 ? (
+          <div onClick={onGoDebts} style={{ cursor: "pointer" }} title="Ver gastos fijos">
+            <StatTile label="Gastos fijos · por mes" value={fmt(fixedTotal)} valueColor="var(--tj-debt)" />
+          </div>
+        ) : (
+          <StatTile label="Tarjetas · Compras activas" value={`${data.cards.length} · ${data.purchases.length}`} />
+        )}
       </div>
 
       {/* main grid */}

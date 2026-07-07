@@ -7,6 +7,7 @@ const base = (): AppData => ({
   cards: [{ id: "c1", nickname: "A", holder: "x", brand: "visa", last4: "1", limit: 100, limitCurrency: "ARS", expiry: "", theme: "violet" }],
   purchases: [{ id: "p1", cardId: "c1", merchant: "m", amount: 10, currency: "ARS", installments: 6, paidInstallments: 2, category: "Otros", date: "2026-01-01" }],
   debts: [{ id: "d1", creditor: "j", note: "", amount: 100, currency: "ARS", installments: 4, paidInstallments: 1 }],
+  fixedExpenses: [],
 });
 
 describe("reducer", () => {

@@ -3,7 +3,7 @@
 import { useOptimistic, useState, useTransition } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { reducer, type Action } from "@/lib/store";
-import { THEMES, type AppData, type Card, type Debt, type Purchase, type Rates } from "@/lib/types";
+import { THEMES, type AppData, type Card, type Debt, type FixedExpense, type Purchase, type Rates } from "@/lib/types";
 import * as actions from "@/app/actions";
 import { AppShell } from "./AppShell";
 import { Sidebar } from "./Sidebar";
@@ -14,9 +14,10 @@ import { NewCardModal } from "./modals/NewCardModal";
 import { NewPurchaseModal } from "./modals/NewPurchaseModal";
 import { SettingsModal } from "./modals/SettingsModal";
 import { NewDebtModal } from "./modals/NewDebtModal";
+import { FixedExpenseModal } from "./modals/FixedExpenseModal";
 
 type View = "dashboard" | "card" | "debts";
-type Modal = null | "card" | "purchase" | "settings" | "debt";
+type Modal = null | "card" | "purchase" | "settings" | "debt" | "fixed";
 
 export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: string }) {
   // optimistic overlay on top of the server data, driven by the same pure reducer
@@ -26,6 +27,9 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
   const [view, setView] = useState<View>("dashboard");
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [modal, setModal] = useState<Modal>(null);
+  // fixed-expense modal context: what we're editing (null = create) and a preselected card
+  const [fixedEdit, setFixedEdit] = useState<FixedExpense | null>(null);
+  const [fixedCardId, setFixedCardId] = useState<string | null>(null);
 
   // apply optimistically + run the server action inside one transition
   function run(action: Action, serverCall: () => Promise<void>) {
@@ -63,6 +67,12 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
   const createDebt = (d: Debt) => run({ type: "ADD_DEBT", debt: d }, () => actions.createDebt(d));
   const deleteDebt = (id: string) => run({ type: "DELETE_DEBT", id }, () => actions.deleteDebt(id));
   const payDebtDelta = (id: string, delta: number) => run({ type: "PAY_DEBT_DELTA", id, delta }, () => actions.payDebtDelta(id, delta));
+  const createFixed = (f: FixedExpense) => run({ type: "ADD_FIXED", fixed: f }, () => actions.createFixedExpense(f));
+  const updateFixed = (id: string, f: FixedExpense) => run({ type: "EDIT_FIXED", id, patch: f }, () => actions.updateFixedExpense(id, f));
+  const deleteFixed = (id: string) => run({ type: "DELETE_FIXED", id }, () => actions.deleteFixedExpense(id));
+  const toggleFixed = (f: FixedExpense) => run({ type: "TOGGLE_FIXED", id: f.id }, () => actions.toggleFixedExpense(f.id, !f.active));
+  const openNewFixed = (cardId: string | null) => { setFixedEdit(null); setFixedCardId(cardId); setModal("fixed"); };
+  const openEditFixed = (f: FixedExpense) => { setFixedEdit(f); setFixedCardId(f.cardId); setModal("fixed"); };
   const saveRates = (rates: Partial<Rates>) =>
     run({ type: "SET_RATES", rates }, () => actions.saveRates({ usd: rates.USD ?? optimistic.rates.USD, eur: rates.EUR ?? optimistic.rates.EUR }));
 
@@ -74,6 +84,7 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
             cards={optimistic.cards}
             purchases={optimistic.purchases}
             rates={optimistic.rates}
+            fixedExpenses={optimistic.fixedExpenses}
             view={effectiveView}
             selectedCardId={selectedCardId}
             debtsCount={optimistic.debts.length}
@@ -94,6 +105,7 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
             onAddCard={() => setModal("card")}
             onOpenCard={openCard}
             onDeleteCard={deleteCard}
+            onGoDebts={goDebts}
           />
         )}
 
@@ -103,12 +115,17 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
             card={selectedCard}
             purchases={optimistic.purchases}
             rates={optimistic.rates}
+            fixedExpenses={optimistic.fixedExpenses}
             onBack={goHome}
             onAddPurchase={() => setModal("purchase")}
             onDeleteCard={() => deleteCard(selectedCard.id)}
             onPayAll={() => payCard(selectedCard.id)}
             onPayDelta={payDelta}
             onDeletePurchase={deletePurchase}
+            onAddFixed={() => openNewFixed(selectedCard.id)}
+            onEditFixed={openEditFixed}
+            onToggleFixed={toggleFixed}
+            onDeleteFixed={deleteFixed}
           />
         )}
 
@@ -116,9 +133,14 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
           <DebtsView
             debts={optimistic.debts}
             rates={optimistic.rates}
+            fixedExpenses={optimistic.fixedExpenses}
             onAddDebt={() => setModal("debt")}
             onPayDebtDelta={payDebtDelta}
             onDeleteDebt={deleteDebt}
+            onAddFixed={() => openNewFixed(null)}
+            onEditFixed={openEditFixed}
+            onToggleFixed={toggleFixed}
+            onDeleteFixed={deleteFixed}
           />
         )}
       </AppShell>
@@ -127,6 +149,16 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
       <NewPurchaseModal open={modal === "purchase"} onClose={() => setModal(null)} onCreate={createPurchase} cards={optimistic.cards} rates={optimistic.rates} defaultCardId={defaultPurchaseCardId} />
       <SettingsModal open={modal === "settings"} onClose={() => setModal(null)} rates={optimistic.rates} onSave={saveRates} />
       <NewDebtModal open={modal === "debt"} onClose={() => setModal(null)} onCreate={createDebt} rates={optimistic.rates} />
+      <FixedExpenseModal
+        open={modal === "fixed"}
+        onClose={() => setModal(null)}
+        onCreate={createFixed}
+        onUpdate={updateFixed}
+        cards={optimistic.cards}
+        rates={optimistic.rates}
+        initial={fixedEdit}
+        defaultCardId={fixedCardId}
+      />
 
       <Toaster position="top-center" richColors />
     </>

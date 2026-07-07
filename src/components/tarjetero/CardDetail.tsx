@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
-import type { Card, Purchase, Rates } from "@/lib/types";
+import type { Card, FixedExpense, Purchase, Rates } from "@/lib/types";
 import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseInstallment, rate } from "@/lib/calc";
 import { updateCardClosing } from "@/app/actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,17 +18,23 @@ interface Props {
   card: Card;
   purchases: Purchase[];
   rates: Rates;
+  fixedExpenses: FixedExpense[];
   onBack: () => void;
   onAddPurchase: () => void;
   onDeleteCard: () => void;
   onPayAll: () => void;
   onPayDelta: (id: string, delta: number) => void;
   onDeletePurchase: (id: string) => void;
+  onAddFixed: () => void;
+  onEditFixed: (f: FixedExpense) => void;
+  onToggleFixed: (f: FixedExpense) => void;
+  onDeleteFixed: (id: string) => void;
 }
 
-export function CardDetail({ card, purchases, rates, onBack, onAddPurchase, onDeleteCard, onPayAll, onPayDelta, onDeletePurchase }: Props) {
-  const m = cardMetrics(card, purchases, rates);
+export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAddPurchase, onDeleteCard, onPayAll, onPayDelta, onDeletePurchase, onAddFixed, onEditFixed, onToggleFixed, onDeleteFixed }: Props) {
+  const m = cardMetrics(card, purchases, rates, fixedExpenses);
   const ps = purchases.filter((p) => p.cardId === card.id);
+  const cardFixed = fixedExpenses.filter((f) => f.cardId === card.id);
 
   const [closingOpen, setClosingOpen] = useState(false);
   const [closingForm, setClosingForm] = useState<ClosingForm>(formFromCard(card));
@@ -161,6 +167,47 @@ export function CardDetail({ card, purchases, rates, onBack, onAddPurchase, onDe
               Todavía no hay compras en esta tarjeta.
               <br />
               Tocá <b style={{ color: "var(--tj-accent)" }}>+ Cargar compra</b> para empezar.
+            </div>
+          )}
+
+          {/* fixed expenses charged to this card */}
+          <div className="mt-7 mb-3 flex items-center justify-between">
+            <div>
+              <h2 className="m-0 text-[19px] font-extrabold tracking-tight">Gastos fijos</h2>
+              <div className="mt-0.5 text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>Cargos mensuales recurrentes que ocupan el límite de esta tarjeta.</div>
+            </div>
+            <button onClick={onAddFixed} className="tj-cta shrink-0 cursor-pointer rounded-[13px] border-none px-4 py-2.5 text-[12.5px] font-bold" style={{ background: "rgba(109,94,246,.12)", color: "var(--tj-accent)" }}>
+              + Gasto fijo
+            </button>
+          </div>
+
+          {cardFixed.length > 0 ? (
+            <div className="flex flex-col gap-2.5">
+              {cardFixed.map((fx) => {
+                const per = fx.amount * rate(rates, fx.currency);
+                return (
+                  <div key={fx.id} className="tj-glass-soft flex flex-wrap items-center gap-x-4 gap-y-2.5" style={{ padding: "14px 18px", borderRadius: 16, opacity: fx.active ? 1 : 0.55 }}>
+                    <span style={{ width: 30, height: 30, borderRadius: 10, flex: "none", background: hexA(catColor(fx.category), 0.16) }} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[14px] font-extrabold tracking-tight">{fx.name}{!fx.active && <span className="ml-2 text-[11px] font-bold" style={{ color: "var(--tj-muted)" }}>· pausado</span>}</div>
+                      <div className="mt-px text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>{fx.category} · {fmtCur(fx.amount, fx.currency)}/mes</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[15px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(per)}</div>
+                      <div className="text-[10.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>por mes</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => onEditFixed(fx)} className="cursor-pointer rounded-[10px] px-3 py-[7px] text-[11.5px] font-bold" style={{ border: "1px solid rgba(0,0,0,.12)", background: "transparent", color: "var(--tj-muted-2)" }}>Editar</button>
+                      <button onClick={() => onToggleFixed(fx)} className="cursor-pointer rounded-[10px] px-3 py-[7px] text-[11.5px] font-bold" style={{ border: "1px solid rgba(0,0,0,.12)", background: "transparent", color: "var(--tj-muted-2)" }}>{fx.active ? "Pausar" : "Activar"}</button>
+                      <button onClick={() => onDeleteFixed(fx.id)} className="cursor-pointer rounded-[10px] px-3 py-[7px] text-[11.5px] font-bold" style={{ border: "none", background: "rgba(214,69,90,.08)", color: "var(--tj-danger)" }}>Eliminar</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-[16px] px-5 py-7 text-center text-[13px] font-semibold" style={{ background: "rgba(255,255,255,.5)", border: "1px dashed rgba(109,94,246,.3)", color: "#9a96b6" }}>
+              Sin gastos fijos en esta tarjeta. Tocá <b style={{ color: "var(--tj-accent)" }}>+ Gasto fijo</b> para sumar una suscripción.
             </div>
           )}
         </div>

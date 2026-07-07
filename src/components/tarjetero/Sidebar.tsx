@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import type { Card, Purchase, Rates } from "@/lib/types";
+import type { Card, FixedExpense, Purchase, Rates } from "@/lib/types";
 import { cardMetrics, fmt, themeColors } from "@/lib/calc";
 
 type View = "dashboard" | "card" | "debts";
@@ -29,6 +29,7 @@ interface Props {
   cards: Card[];
   purchases: Purchase[];
   rates: Rates;
+  fixedExpenses: FixedExpense[];
   view: View;
   selectedCardId: string | null;
   debtsCount: number;
@@ -41,7 +42,7 @@ interface Props {
   userEmail: string;
 }
 
-export function Sidebar({ cards, purchases, rates, view, selectedCardId, debtsCount, onAddPurchase, onGoHome, onGoDebts, onAddCard, onOpenSettings, onOpenCard, userEmail }: Props) {
+export function Sidebar({ cards, purchases, rates, fixedExpenses, view, selectedCardId, debtsCount, onAddPurchase, onGoHome, onGoDebts, onAddCard, onOpenSettings, onOpenCard, userEmail }: Props) {
   return (
     <aside className="tj-side" style={{ display: "flex", flexDirection: "column", gap: 14, padding: "22px 18px", height: "100vh", position: "sticky", top: 0 }}>
       {/* logo */}
@@ -78,7 +79,7 @@ export function Sidebar({ cards, purchases, rates, view, selectedCardId, debtsCo
       <div className="tj-sidecards" style={{ display: "flex", flexDirection: "column", gap: 6, overflowY: "auto", flex: 1, paddingRight: 2 }}>
         {cards.map((c) => {
           const [a, b] = themeColors(c.theme);
-          const m = cardMetrics(c, purchases, rates);
+          const m = cardMetrics(c, purchases, rates, fixedExpenses);
           const active = view === "card" && selectedCardId === c.id;
           return (
             <button

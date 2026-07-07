@@ -50,11 +50,23 @@ export interface Debt {
   paidInstallments: number;
 }
 
+/** A recurring monthly charge. cardId set = charged to that card; null = standalone. */
+export interface FixedExpense {
+  id: string;
+  cardId: string | null;
+  name: string;
+  amount: number;
+  currency: Currency;
+  category: string;
+  active: boolean;
+}
+
 export interface AppData {
   rates: Rates;
   cards: Card[];
   purchases: Purchase[];
   debts: Debt[];
+  fixedExpenses: FixedExpense[];
 }
 
 export const THEMES: ThemeName[] = [

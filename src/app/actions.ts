@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { cards, debts, profiles, purchases } from "@/db/schema";
+import { cards, debts, fixedExpenses, profiles, purchases } from "@/db/schema";
 import { createClient } from "@/lib/supabase/server";
-import { cardSchema, closingConfigSchema, debtSchema, purchaseSchema, ratesSchema } from "@/lib/schemas";
+import { cardSchema, closingConfigSchema, debtSchema, fixedExpenseSchema, purchaseSchema, ratesSchema } from "@/lib/schemas";
 
 async function requireUserId(): Promise<string> {
   const supabase = await createClient();
@@ -151,7 +151,84 @@ export async function payDebtDelta(id: string, delta: number) {
   done();
 }
 
+// ---------- fixed expenses (recurring monthly charges) ----------
+/** Normalize an optional cardId coming from the client to a real uuid or null. */
+function cleanCardId(cardId: unknown): string | null {
+  return typeof cardId === "string" && cardId.trim() ? cardId : null;
+}
+
+export async function createFixedExpense(input: unknown) {
+  const userId = await requireUserId();
+  const f = fixedExpenseSchema.parse(input);
+  await db.insert(fixedExpenses).values({
+    userId,
+    cardId: cleanCardId(f.cardId),
+    name: f.name,
+    amount: f.amount,
+    currency: f.currency,
+    category: f.category,
+    active: f.active,
+  });
+  done();
+}
+
+export async function updateFixedExpense(id: string, input: unknown) {
+  const userId = await requireUserId();
+  const f = fixedExpenseSchema.parse(input);
+  await db
+    .update(fixedExpenses)
+    .set({
+      cardId: cleanCardId(f.cardId),
+      name: f.name,
+      amount: f.amount,
+      currency: f.currency,
+      category: f.category,
+      active: f.active,
+    })
+    .where(and(eq(fixedExpenses.id, id), eq(fixedExpenses.userId, userId)));
+  done();
+}
+
+export async function deleteFixedExpense(id: string) {
+  const userId = await requireUserId();
+  await db.delete(fixedExpenses).where(and(eq(fixedExpenses.id, id), eq(fixedExpenses.userId, userId)));
+  done();
+}
+
+export async function toggleFixedExpense(id: string, active: boolean) {
+  const userId = await requireUserId();
+  await db
+    .update(fixedExpenses)
+    .set({ active })
+    .where(and(eq(fixedExpenses.id, id), eq(fixedExpenses.userId, userId)));
+  done();
+}
+
 // ---------- settings (exchange rates on the profile) ----------
+export interface DollarQuote {
+  /** "Dólar tarjeta" venta — cost of a card purchase in USD (oficial + percepciones). */
+  tarjeta: number | null;
+  /** "Dólar oficial" venta — BNA-style sell rate used to convert USD debt at payment. */
+  oficial: number | null;
+}
+
+/** Fetch a live USD reference from dolarapi.com so the user can update rates.USD. */
+export async function fetchDollarRate(): Promise<DollarQuote> {
+  await requireUserId();
+  async function venta(kind: "tarjeta" | "oficial"): Promise<number | null> {
+    try {
+      const res = await fetch(`https://dolarapi.com/v1/dolares/${kind}`, { cache: "no-store" });
+      if (!res.ok) return null;
+      const json = (await res.json()) as { venta?: number };
+      return typeof json.venta === "number" ? json.venta : null;
+    } catch {
+      return null;
+    }
+  }
+  const [tarjeta, oficial] = await Promise.all([venta("tarjeta"), venta("oficial")]);
+  return { tarjeta, oficial };
+}
+
 export async function saveRates(input: unknown) {
   const userId = await requireUserId();
   const { usd, eur } = ratesSchema.parse(input);
