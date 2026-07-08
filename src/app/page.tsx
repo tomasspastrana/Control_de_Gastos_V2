@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { getAppData } from "@/lib/data";
 import { TarjeteroApp } from "@/components/tarjetero/TarjeteroApp";
 
+// Reads cookies/auth + per-user data on every request; never prerender at build.
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const supabase = await createClient();
   const {
