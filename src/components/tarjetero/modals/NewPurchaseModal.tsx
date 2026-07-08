@@ -7,7 +7,7 @@ import { TjSelect } from "../TjSelect";
 import { purchaseSchema, toAmount } from "@/lib/schemas";
 import { uid } from "@/lib/id";
 import { fmt, rate } from "@/lib/calc";
-import { fmtClosing, installmentStatement, nextClosing, parseYmd, ruleFromCard } from "@/lib/closing";
+import { dueDate, fmtClosing, nextClosing, ruleFromCard } from "@/lib/closing";
 import { CATEGORIES, CURRENCIES, type Card, type Currency, type Purchase, type Rates } from "@/lib/types";
 
 interface Props {
@@ -60,15 +60,15 @@ export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, rat
   const hasCards = cards.length > 0;
   const isEdit = !!initial;
 
-  // simulator: which statement this purchase's next pending installment falls into
+  // simulator: the next unpaid cuota lands in the CURRENT statement (next closing from today).
+  // The purchase date is informational only — position depends on how many cuotas are paid.
   const simCard = cards.find((c) => c.id === f.cardId);
   const simRule = simCard ? ruleFromCard(simCard) : null;
   const simInst = Math.max(1, parseInt(f.installments || "1", 10) || 1);
-  const simPaid = Math.min(Math.max(0, parseInt(f.paidInstallments || "0", 10) || 0), simInst - 1);
-  const sim = simRule && f.date ? installmentStatement(simRule, parseYmd(f.date), simPaid, simCard?.dueDays ?? null) : null;
-  const isFresh = simPaid === 0;
-  // rolled = a fresh purchase whose first statement is later than the current open one
-  const rolled = isFresh && !!(simRule && sim && sim.closing.getTime() > nextClosing(simRule).getTime());
+  const simPaid = Math.min(Math.max(0, parseInt(f.paidInstallments || "0", 10) || 0), simInst);
+  const simFullyPaid = simPaid >= simInst;
+  const simClosing = simRule ? nextClosing(simRule) : null;
+  const simDue = simClosing && simCard?.dueDays != null ? dueDate(simClosing, simCard.dueDays) : null;
 
   function submit() {
     const parsed = purchaseSchema.safeParse(f);
@@ -161,20 +161,25 @@ export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, rat
               </div>
             </div>
 
-            {/* simulator: statement this purchase lands in */}
+            {/* simulator: the next cuota lands in the current statement (anchored to now) */}
             {simCard && (
-              sim ? (
-                <div className="mb-1 rounded-[12px] px-3.5 py-2.5" style={{ background: "rgba(109,94,246,.08)", border: "1px solid rgba(109,94,246,.18)" }}>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-bold" style={{ color: "var(--tj-accent)" }}>
-                    <span>🧾 {isFresh ? "Entra al" : `Próxima cuota (#${simPaid + 1}) en el`} resumen que cierra el {fmtClosing(sim.closing)}</span>
-                    {rolled && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: "rgba(232,185,78,.2)", color: "#a9791f" }}>próximo resumen</span>}
+              simRule ? (
+                simFullyPaid ? (
+                  <div className="mb-1 text-[11.5px] font-semibold" style={{ color: "var(--tj-good)" }}>
+                    ✓ La compra quedaría saldada (todas las cuotas pagadas).
                   </div>
-                  {sim.due && (
-                    <div className="mt-0.5 text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
-                      {isFresh ? "La primera cuota vence" : "Esa cuota vence"} el {fmtClosing(sim.due)}
+                ) : (
+                  <div className="mb-1 rounded-[12px] px-3.5 py-2.5" style={{ background: "rgba(109,94,246,.08)", border: "1px solid rgba(109,94,246,.18)" }}>
+                    <div className="text-[12px] font-bold" style={{ color: "var(--tj-accent)" }}>
+                      🧾 La próxima cuota (#{simPaid + 1}/{simInst}) entra al resumen actual{simClosing && <> que cierra el {fmtClosing(simClosing)}</>}
                     </div>
-                  )}
-                </div>
+                    {simDue && (
+                      <div className="mt-0.5 text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
+                        Esa cuota vence el {fmtClosing(simDue)} · la fecha de compra es solo informativa
+                      </div>
+                    )}
+                  </div>
+                )
               ) : (
                 <div className="mb-1 text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
                   Configurá el ciclo de cierre de la tarjeta para simular en qué resumen cae.

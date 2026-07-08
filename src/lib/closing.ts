@@ -109,6 +109,29 @@ export function closingInMonth(rule: ClosingRule, year: number, month: number): 
   return c.getFullYear() === year && c.getMonth() === month ? c : null;
 }
 
+/**
+ * Walking the closings FORWARD from `from` (offset 0 = the next closing), find the one that
+ * falls in calendar (year, month) and return it with its offset. Null when that month has no
+ * closing ahead (past months, or months the cycle skips). Used to anchor installment
+ * scheduling to "now" rather than to the purchase date.
+ */
+export function forwardClosingInMonth(
+  rule: ClosingRule,
+  year: number,
+  month: number,
+  from: Date = new Date(),
+): { closing: Date; offset: number } | null {
+  const target = year * 12 + month;
+  let c = nextClosing(rule, from);
+  for (let offset = 0; offset < 60; offset++) {
+    const cm = c.getFullYear() * 12 + c.getMonth();
+    if (cm === target) return { closing: c, offset };
+    if (cm > target) return null; // walked past the month without hitting it
+    c = nextClosing(rule, addDays(c, 1));
+  }
+  return null;
+}
+
 /** The next `n` closing dates starting at nextClosing(from). Iterates nextClosing so it
  *  stays correct for both rule shapes and for dates before a weekday_cycle anchor. */
 export function upcomingClosings(rule: ClosingRule, from: Date = new Date(), n = 3): Date[] {
@@ -133,23 +156,6 @@ export function purchaseStatement(
   dueDays: number | null,
 ): { closing: Date; due: Date | null } {
   const closing = nextClosing(rule, purchaseDate);
-  return { closing, due: dueDays != null ? dueDate(closing, dueDays) : null };
-}
-
-/**
- * Statement for a purchase's (0-indexed) installment: `index` cycles after the first.
- * Installment #1 (index 0) = first statement; installment #k = index k-1. Lets us show the
- * statement of the *current* pending cuota instead of always the first one.
- */
-export function installmentStatement(
-  rule: ClosingRule,
-  purchaseDate: Date,
-  index: number,
-  dueDays: number | null,
-): { closing: Date; due: Date | null } {
-  const i = Math.max(0, index);
-  const closings = upcomingClosings(rule, purchaseDate, i + 1);
-  const closing = closings[Math.min(i, closings.length - 1)];
   return { closing, due: dueDays != null ? dueDate(closing, dueDays) : null };
 }
 

@@ -1,10 +1,11 @@
-// Derived monthly statements ("resúmenes"): computed from purchases' installment
-// schedules + recurring fixed expenses + each card's billing cycle. No persistence —
-// past/current/future statements are all derivable from the installment calendar.
+// Derived monthly statements ("resúmenes"). Scheduling is anchored to "now": the purchase
+// date is informational only — what places each installment is how many are already paid.
+// The next unpaid installment lands in the CURRENT statement (offset 0 = next closing), and
+// the following ones in the next closings. Recurring fixed expenses appear every statement.
 
 import type { Card, FixedExpense, Purchase, Rates } from "./types";
 import { purchaseInstallment, rate } from "./calc";
-import { closingInMonth, dueDate, parseYmd, ruleFromCard, upcomingClosings, ymd } from "./closing";
+import { dueDate, forwardClosingInMonth, nextClosing, ruleFromCard } from "./closing";
 
 export interface StatementItem {
   label: string;
@@ -17,13 +18,26 @@ export interface StatementItem {
 export interface CardStatement {
   cardId: string;
   nickname: string;
-  closing: Date | null; // null = this card has no statement closing in the month
+  closing: Date | null; // null = this card has no statement in the month
   due: Date | null;
   items: StatementItem[];
   total: number;
 }
 
-/** One card's statement for calendar (year, month). Empty when the card doesn't close that month. */
+function fixedItem(f: FixedExpense, rates: Rates): StatementItem {
+  return {
+    label: f.name,
+    sub: f.occupiesLimit ? "gasto fijo" : "gasto fijo · no ocupa límite",
+    amount: f.amount * rate(rates, f.currency),
+    kind: "fixed",
+  };
+}
+
+/**
+ * One card's statement for calendar (year, month), anchored to `from` (today).
+ * `offset` (0 = current/next closing) decides which installment number of each purchase falls
+ * here: the (paidInstallments + 1 + offset)-th, as long as it's still pending.
+ */
 export function cardStatement(
   card: Card,
   purchases: Purchase[],
@@ -37,21 +51,19 @@ export function cardStatement(
   const base = { cardId: card.id, nickname: card.nickname };
   if (!rule) return { ...base, closing: null, due: null, items: [], total: 0 };
 
-  const closing = closingInMonth(rule, year, month);
-  if (!closing) return { ...base, closing: null, due: null, items: [], total: 0 };
+  const found = forwardClosingInMonth(rule, year, month, from);
+  if (!found) return { ...base, closing: null, due: null, items: [], total: 0 };
+  const { closing, offset } = found;
 
-  const key = ymd(closing);
   const items: StatementItem[] = [];
-
   for (const p of purchases) {
     if (p.cardId !== card.id) continue;
-    const closings = upcomingClosings(rule, parseYmd(p.date), p.installments);
-    const idx = closings.findIndex((c) => ymd(c) === key);
-    // only installments that are still PENDING (paid ones belong to past statements)
-    if (idx >= 0 && idx >= p.paidInstallments) {
+    const remaining = p.installments - p.paidInstallments;
+    if (offset < remaining) {
+      const cuota = p.paidInstallments + 1 + offset;
       items.push({
         label: p.merchant,
-        sub: `cuota ${idx + 1}/${p.installments}`,
+        sub: `cuota ${cuota}/${p.installments}`,
         amount: purchaseInstallment(p, rates),
         kind: "purchase",
         purchaseId: p.id,
@@ -59,18 +71,9 @@ export function cardStatement(
     }
   }
 
-  // recurring fixed expenses only from the current month onward (still to pay)
-  const isPast = year * 12 + month < from.getFullYear() * 12 + from.getMonth();
-  if (!isPast) {
-    for (const f of fixed) {
-      if (f.cardId !== card.id || !f.active) continue;
-      items.push({
-        label: f.name,
-        sub: f.occupiesLimit ? "gasto fijo" : "gasto fijo · no ocupa límite",
-        amount: f.amount * rate(rates, f.currency),
-        kind: "fixed",
-      });
-    }
+  // recurring fixed expenses appear in every (present/future) statement
+  for (const f of fixed) {
+    if (f.cardId === card.id && f.active) items.push(fixedItem(f, rates));
   }
 
   const total = items.reduce((s, i) => s + i.amount, 0);
@@ -79,10 +82,10 @@ export function cardStatement(
 }
 
 /**
- * The card's "current statement to pay" (this calendar month). For cards with a billing
- * cycle it's the month's statement; without a cycle it falls back to one pending installment
- * per purchase + active fixed. This is what "Pagar tarjeta" and "A pagar este mes" use, so
- * those figures match the Resúmenes view exactly.
+ * The card's "current statement to pay" = offset 0 (the next closing from `from`): one cuota
+ * #(paidInstallments+1) per pending purchase + active fixed expenses. This is what
+ * "Pagar tarjeta" and "A pagar este mes" use, and it matches the current month in Resúmenes.
+ * Cards without a billing cycle fall back to the same shape without dates.
  */
 export function currentStatement(
   card: Card,
@@ -92,7 +95,7 @@ export function currentStatement(
   from: Date = new Date(),
 ): CardStatement {
   const rule = ruleFromCard(card);
-  if (rule) return cardStatement(card, purchases, fixed, rates, from.getFullYear(), from.getMonth(), from);
+  const closing = rule ? nextClosing(rule, from) : null;
 
   const items: StatementItem[] = [];
   for (const p of purchases) {
@@ -106,24 +109,20 @@ export function currentStatement(
     });
   }
   for (const f of fixed) {
-    if (f.cardId !== card.id || !f.active) continue;
-    items.push({
-      label: f.name,
-      sub: f.occupiesLimit ? "gasto fijo" : "gasto fijo · no ocupa límite",
-      amount: f.amount * rate(rates, f.currency),
-      kind: "fixed",
-    });
+    if (f.cardId === card.id && f.active) items.push(fixedItem(f, rates));
   }
+
   const total = items.reduce((s, i) => s + i.amount, 0);
-  return { cardId: card.id, nickname: card.nickname, closing: null, due: null, items, total };
+  const due = closing && card.dueDays != null ? dueDate(closing, card.dueDays) : null;
+  return { cardId: card.id, nickname: card.nickname, closing, due, items, total };
 }
 
 export interface GeneralStatement {
   total: number;
-  perCard: CardStatement[]; // only cards that close in the month
+  perCard: CardStatement[]; // only cards with something billed in the month
 }
 
-/** Combined statement for a month: every card that closes in it, plus the grand total. */
+/** Combined statement for a month: every card with items in it, plus the grand total. */
 export function generalStatement(
   cards: Card[],
   purchases: Purchase[],

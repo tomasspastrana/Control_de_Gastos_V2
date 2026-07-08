@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import type { Card, FixedExpense, Purchase, Rates } from "@/lib/types";
 import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseInstallment, rate } from "@/lib/calc";
-import { fmtClosing, installmentStatement, parseYmd, paymentAlert, ruleFromCard } from "@/lib/closing";
+import { dueDate, fmtClosing, nextClosing, paymentAlert, ruleFromCard } from "@/lib/closing";
 import { currentStatement } from "@/lib/statements";
 import { updateCardClosing } from "@/app/actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -41,6 +41,9 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
 
   const rule = ruleFromCard(card);
   const alert = rule ? paymentAlert(rule, card.dueDays ?? null, m.debt > 0.5, card.lastPaymentAt ?? null) : null;
+  // the current statement (next closing from today) — where each purchase's next cuota lands
+  const curClosing = rule ? nextClosing(rule) : null;
+  const curDue = curClosing && card.dueDays != null ? dueDate(curClosing, card.dueDays) : null;
   // "Pagar tarjeta" = this month's statement (matches the Resúmenes total exactly)
   const stmt = currentStatement(card, purchases, fixedExpenses, rates);
   const payIds = stmt.items.filter((i) => i.purchaseId).map((i) => i.purchaseId!);
@@ -147,8 +150,6 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
                   const per = purchaseInstallment(p, rates);
                   const rem = (tot * (p.installments - p.paidInstallments)) / p.installments;
                   const fullyPaid = p.paidInstallments >= p.installments;
-                  // statement of the next PENDING installment (not the first one)
-                  const stmt = rule ? installmentStatement(rule, parseYmd(p.date), Math.min(p.paidInstallments, p.installments - 1), card.dueDays ?? null) : null;
                   return (
                     <motion.div
                       key={p.id}
@@ -166,14 +167,14 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
                           <div className="mt-px text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
                             {p.category} · {fmtDate(p.date)} · {fmtCur(per, "ARS")}/cuota
                           </div>
-                          {stmt && (
+                          {rule && (
                             <div className="mt-1 inline-flex flex-wrap items-center gap-1 text-[11px] font-semibold" style={{ color: fullyPaid ? "var(--tj-good)" : "var(--tj-accent)" }}>
                               {fullyPaid ? (
                                 <><span aria-hidden>✓</span> Cuotas saldadas</>
                               ) : (
                                 <>
-                                  <span aria-hidden>🧾</span> Cuota {p.paidInstallments + 1}/{p.installments} · resumen cierra {fmtClosing(stmt.closing)}
-                                  {stmt.due && <span style={{ color: "var(--tj-muted)" }}>· vence {fmtClosing(stmt.due)}</span>}
+                                  <span aria-hidden>🧾</span> Cuota {p.paidInstallments + 1}/{p.installments} · resumen cierra {curClosing && fmtClosing(curClosing)}
+                                  {curDue && <span style={{ color: "var(--tj-muted)" }}>· vence {fmtClosing(curDue)}</span>}
                                 </>
                               )}
                             </div>

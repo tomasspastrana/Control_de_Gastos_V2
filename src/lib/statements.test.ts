@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cardStatement, generalStatement } from "./statements";
+import { cardStatement, currentStatement, generalStatement } from "./statements";
 import { parseYmd } from "./closing";
 import type { Card, FixedExpense, Purchase, Rates } from "./types";
 
@@ -17,56 +17,62 @@ const p = (over: Partial<Purchase>): Purchase => ({
   installments: 3, paidInstallments: 0, category: "Otros", date: "2026-06-10", ...over,
 });
 
-const from = parseYmd("2026-06-01"); // fija el "hoy" para tests deterministas
+const hoy = parseYmd("2026-07-08"); // current close = 30-jul (offset 0)
 
-describe("cardStatement", () => {
-  it("only shows PENDING installments; paid ones don't appear", () => {
-    // compra 10-jun en 3 cuotas → resúmenes jun, jul, ago; 1 cuota pagada
-    const purchases = [p({ id: "a", merchant: "Apple", installments: 3, paidInstallments: 1 })];
-    const jun = cardStatement(card, purchases, [], rates, 2026, 5, from); // junio (month 5): cuota 1 pagada → vacío
-    const jul = cardStatement(card, purchases, [], rates, 2026, 6, from);
-    const ago = cardStatement(card, purchases, [], rates, 2026, 7, from);
-    expect(jun.items).toHaveLength(0);
-    expect(jul.items[0].sub).toBe("cuota 2/3");
-    expect(ago.items[0].sub).toBe("cuota 3/3");
+describe("cardStatement (anclado a 'ahora' por offset)", () => {
+  it("la próxima cuota impaga cae en el mes actual sin importar la fecha de compra", () => {
+    // compra vieja (enero) con 2/3 pagadas → cuota 3 en el resumen actual (julio)
+    const purchases = [p({ id: "a", merchant: "AF Jeans", date: "2026-01-15", installments: 3, paidInstallments: 2 })];
+    const jul = cardStatement(card, purchases, [], rates, 2026, 6, hoy);
+    expect(jul.items).toHaveLength(1);
+    expect(jul.items[0].sub).toBe("cuota 3/3");
   });
-  it("fully-paid purchase never appears", () => {
-    const purchases = [p({ installments: 6, paidInstallments: 6, date: "2025-12-10" })];
-    const jul = cardStatement(card, purchases, [], rates, 2026, 6, from);
+  it("distribuye las cuotas restantes hacia adelante", () => {
+    const purchases = [p({ id: "a", installments: 6, paidInstallments: 2 })]; // faltan 4
+    expect(cardStatement(card, purchases, [], rates, 2026, 6, hoy).items[0].sub).toBe("cuota 3/6"); // julio
+    expect(cardStatement(card, purchases, [], rates, 2026, 7, hoy).items[0].sub).toBe("cuota 4/6"); // agosto
+  });
+  it("compra saldada no aparece", () => {
+    const jul = cardStatement(card, [p({ installments: 6, paidInstallments: 6 })], [], rates, 2026, 6, hoy);
     expect(jul.items).toHaveLength(0);
   });
-  it("month with no installment of this purchase → empty statement", () => {
-    const may = cardStatement(card, [p({ installments: 3, date: "2026-06-10" })], [], rates, 2026, 4, from); // mayo, antes de la compra
-    expect(may.items).toHaveLength(0);
+  it("meses pasados quedan vacíos", () => {
+    const jun = cardStatement(card, [p({ installments: 3, paidInstallments: 0 })], [], rates, 2026, 5, hoy);
+    expect(jun.closing).toBeNull();
+    expect(jun.items).toHaveLength(0);
   });
-  it("includes active fixed expenses from the current month onward; due date computed", () => {
+  it("incluye gastos fijos activos y calcula el vencimiento", () => {
     const fixed: FixedExpense[] = [
       { id: "f", cardId: "c1", name: "Netflix", amount: 5000, currency: "ARS", category: "Ocio", active: true, occupiesLimit: true },
       { id: "g", cardId: "c1", name: "Off", amount: 9999, currency: "ARS", category: "Ocio", active: false, occupiesLimit: true },
     ];
-    const jul = cardStatement(card, [p({ installments: 3, paidInstallments: 1, date: "2026-06-10" })], fixed, rates, 2026, 6, from);
-    // cuota 2/3 (10.000) + Netflix (5.000); el pausado no cuenta
-    expect(jul.total).toBe(15_000);
-    expect(jul.due && jul.due.getMonth()).toBe(7); // vence en agosto (30-jul + 8)
+    const jul = cardStatement(card, [p({ installments: 3, paidInstallments: 2 })], fixed, rates, 2026, 6, hoy);
+    expect(jul.total).toBe(10_000 + 5_000); // cuota 3 + Netflix; el pausado no cuenta
+    expect(jul.due && jul.due.getMonth()).toBe(7); // 30-jul + 8 → agosto
   });
-  it("skips fixed expenses in past months", () => {
-    const fixed: FixedExpense[] = [
-      { id: "f", cardId: "c1", name: "Netflix", amount: 5000, currency: "ARS", category: "Ocio", active: true, occupiesLimit: true },
+});
+
+describe("currentStatement", () => {
+  it("es una cuota por compra pendiente + fijos (offset 0)", () => {
+    const purchases = [
+      p({ id: "a", installments: 3, paidInstallments: 2 }), // cuota 3
+      p({ id: "b", installments: 6, paidInstallments: 6 }), // saldada → excluida
     ];
-    const may = cardStatement(card, [], fixed, rates, 2026, 4, from); // mayo < junio (from)
-    expect(may.items).toHaveLength(0);
+    const cs = currentStatement(card, purchases, [], rates, hoy);
+    expect(cs.items.map((i) => i.purchaseId)).toEqual(["a"]);
+    expect(cs.total).toBe(10_000);
   });
 });
 
 describe("generalStatement", () => {
-  it("sums the statements of every card with pending items in the month", () => {
+  it("suma las tarjetas con algo a pagar en el mes", () => {
     const card2: Card = { ...card, id: "c2", nickname: "Otra" };
     const purchases = [
       p({ id: "a", cardId: "c1", amount: 30_000, installments: 3, paidInstallments: 0 }),
       p({ id: "b", cardId: "c2", amount: 60_000, installments: 3, paidInstallments: 0 }),
     ];
-    const g = generalStatement([card, card2], purchases, [], rates, 2026, 5, from);
+    const g = generalStatement([card, card2], purchases, [], rates, 2026, 6, hoy);
     expect(g.perCard).toHaveLength(2);
-    expect(g.total).toBe(10_000 + 20_000); // una cuota de cada una
+    expect(g.total).toBe(10_000 + 20_000);
   });
 });
