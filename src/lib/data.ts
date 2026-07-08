@@ -63,6 +63,7 @@ function toFixedExpense(r: FixedExpenseRow): FixedExpense {
     currency: r.currency,
     category: r.category,
     active: r.active,
+    occupiesLimit: r.occupiesLimit,
   };
 }
 

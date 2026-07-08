@@ -31,6 +31,7 @@ const emptyForm = (cardId: string | null) => ({
   category: "Servicios" as string,
   cardId: cardId ?? NO_CARD,
   active: true,
+  occupiesLimit: true,
 });
 
 type Form = ReturnType<typeof emptyForm>;
@@ -42,6 +43,7 @@ const formFrom = (f: FixedExpense): Form => ({
   category: f.category,
   cardId: f.cardId ?? NO_CARD,
   active: f.active,
+  occupiesLimit: f.occupiesLimit,
 });
 
 export function FixedExpenseModal({ open, onClose, onCreate, onUpdate, cards, rates, initial, defaultCardId }: Props) {
@@ -72,6 +74,8 @@ export function FixedExpenseModal({ open, onClose, onCreate, onUpdate, cards, ra
       currency: d.currency,
       category: d.category,
       active: d.active,
+      // only meaningful when charged to a card; standalone expenses don't touch any limit
+      occupiesLimit: d.cardId ? d.occupiesLimit : true,
     };
     if (isEdit) {
       onUpdate(fixed.id, fixed);
@@ -136,6 +140,23 @@ export function FixedExpenseModal({ open, onClose, onCreate, onUpdate, cards, ra
             />
           </div>
         </div>
+
+        {f.cardId !== NO_CARD && (
+          <button
+            type="button"
+            onClick={() => set("occupiesLimit", !f.occupiesLimit)}
+            className="mb-2 flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-[13px] px-[13px] py-[11px] text-[13px] font-bold"
+            style={{ border: "1px solid rgba(120,110,180,.22)", background: "rgba(255,255,255,.6)" }}
+          >
+            <div className="flex w-full items-center justify-between">
+              <span>Ocupa el límite de la tarjeta</span>
+              <span style={{ color: f.occupiesLimit ? "var(--tj-good)" : "var(--tj-muted)" }}>{f.occupiesLimit ? "Sí" : "No"}</span>
+            </div>
+            <span className="text-left" style={{ fontSize: 11, fontWeight: 600, color: "var(--tj-muted)" }}>
+              {f.occupiesLimit ? "Reduce el disponible y suma a la deuda (suscripciones, impuestos)." : "Comisión de mantenimiento: se paga cada mes pero no reduce el disponible."}
+            </span>
+          </button>
+        )}
 
         <button
           type="button"

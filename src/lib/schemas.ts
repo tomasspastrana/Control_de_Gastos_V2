@@ -103,6 +103,7 @@ export const fixedExpenseSchema = z.object({
   category: z.string().min(1).default("Otros"),
   cardId: z.string().trim().nullish(),
   active: z.boolean().default(true),
+  occupiesLimit: z.boolean().default(true),
 });
 export type FixedExpenseInput = z.input<typeof fixedExpenseSchema>;
 

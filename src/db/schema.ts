@@ -78,6 +78,8 @@ export const fixedExpenses = pgTable("fixed_expenses", {
   currency: currencyEnum("currency").notNull().default("ARS"),
   category: text("category").notNull().default("Otros"),
   active: boolean("active").notNull().default(true),
+  // false = maintenance commission: billed/paid but does NOT reduce the card's limit
+  occupiesLimit: boolean("occupies_limit").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

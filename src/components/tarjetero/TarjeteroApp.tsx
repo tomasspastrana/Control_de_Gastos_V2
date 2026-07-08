@@ -30,6 +30,8 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
   // fixed-expense modal context: what we're editing (null = create) and a preselected card
   const [fixedEdit, setFixedEdit] = useState<FixedExpense | null>(null);
   const [fixedCardId, setFixedCardId] = useState<string | null>(null);
+  // purchase modal context: what we're editing (null = create)
+  const [purchaseEdit, setPurchaseEdit] = useState<Purchase | null>(null);
 
   // apply optimistically + run the server action inside one transition
   function run(action: Action, serverCall: () => Promise<void>) {
@@ -61,7 +63,10 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
     if (selectedCardId === id) goHome();
   };
   const createPurchase = (p: Purchase) => run({ type: "ADD_PURCHASE", purchase: p }, () => actions.createPurchase(p));
+  const updatePurchase = (id: string, p: Purchase) => run({ type: "EDIT_PURCHASE", id, patch: p }, () => actions.updatePurchase(id, p));
   const deletePurchase = (id: string) => run({ type: "DELETE_PURCHASE", id }, () => actions.deletePurchase(id));
+  const openNewPurchase = () => { setPurchaseEdit(null); setModal("purchase"); };
+  const openEditPurchase = (p: Purchase) => { setPurchaseEdit(p); setModal("purchase"); };
   const payDelta = (id: string, delta: number) => run({ type: "PAY_DELTA", id, delta }, () => actions.payPurchaseDelta(id, delta));
   const payCard = (cardId: string) => run({ type: "PAY_CARD", cardId }, () => actions.payCard(cardId));
   const createDebt = (d: Debt) => run({ type: "ADD_DEBT", debt: d }, () => actions.createDebt(d));
@@ -88,7 +93,7 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
             view={effectiveView}
             selectedCardId={selectedCardId}
             debtsCount={optimistic.debts.length}
-            onAddPurchase={() => setModal("purchase")}
+            onAddPurchase={openNewPurchase}
             onGoHome={goHome}
             onGoDebts={goDebts}
             onAddCard={() => setModal("card")}
@@ -117,11 +122,12 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
             rates={optimistic.rates}
             fixedExpenses={optimistic.fixedExpenses}
             onBack={goHome}
-            onAddPurchase={() => setModal("purchase")}
+            onAddPurchase={openNewPurchase}
             onDeleteCard={() => deleteCard(selectedCard.id)}
             onPayAll={() => payCard(selectedCard.id)}
             onPayDelta={payDelta}
             onDeletePurchase={deletePurchase}
+            onEditPurchase={openEditPurchase}
             onAddFixed={() => openNewFixed(selectedCard.id)}
             onEditFixed={openEditFixed}
             onToggleFixed={toggleFixed}
@@ -146,7 +152,7 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
       </AppShell>
 
       <NewCardModal open={modal === "card"} onClose={() => setModal(null)} onCreate={createCard} initialTheme={nextTheme} />
-      <NewPurchaseModal open={modal === "purchase"} onClose={() => setModal(null)} onCreate={createPurchase} cards={optimistic.cards} rates={optimistic.rates} defaultCardId={defaultPurchaseCardId} />
+      <NewPurchaseModal open={modal === "purchase"} onClose={() => setModal(null)} onCreate={createPurchase} onUpdate={updatePurchase} cards={optimistic.cards} rates={optimistic.rates} defaultCardId={defaultPurchaseCardId} initial={purchaseEdit} />
       <SettingsModal open={modal === "settings"} onClose={() => setModal(null)} rates={optimistic.rates} onSave={saveRates} />
       <NewDebtModal open={modal === "debt"} onClose={() => setModal(null)} onCreate={createDebt} rates={optimistic.rates} />
       <FixedExpenseModal

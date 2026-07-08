@@ -4,11 +4,29 @@ interface Props {
   onPay: () => void;
   onUnpay: () => void;
   onDelete: () => void;
+  onEdit?: () => void;
 }
 
-export function PayControls({ canPay, canUnpay, onPay, onUnpay, onDelete }: Props) {
+export function PayControls({ canPay, canUnpay, onPay, onUnpay, onDelete, onEdit }: Props) {
   return (
     <div className="flex gap-2">
+      {onEdit && (
+        <button
+          onClick={onEdit}
+          style={{
+            border: "1px solid rgba(0,0,0,.12)",
+            background: "transparent",
+            color: "var(--tj-muted-2)",
+            fontWeight: 700,
+            fontSize: 11.5,
+            padding: "7px 11px",
+            borderRadius: 10,
+            cursor: "pointer",
+          }}
+        >
+          Editar
+        </button>
+      )}
       <button
         onClick={onUnpay}
         disabled={!canUnpay}

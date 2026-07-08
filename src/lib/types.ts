@@ -59,6 +59,8 @@ export interface FixedExpense {
   currency: Currency;
   category: string;
   active: boolean;
+  /** false = maintenance commission: paid monthly but does not reduce the card limit. */
+  occupiesLimit: boolean;
 }
 
 export interface AppData {

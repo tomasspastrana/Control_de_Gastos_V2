@@ -89,6 +89,25 @@ export async function createPurchase(input: unknown) {
   done();
 }
 
+export async function updatePurchase(id: string, input: unknown) {
+  const userId = await requireUserId();
+  const d = purchaseSchema.parse(input);
+  await db
+    .update(purchases)
+    .set({
+      cardId: d.cardId,
+      merchant: d.merchant || "Compra",
+      amount: d.amount,
+      currency: d.currency,
+      installments: d.installments,
+      paidInstallments: d.paidInstallments,
+      category: d.category,
+      date: d.date,
+    })
+    .where(and(eq(purchases.id, id), eq(purchases.userId, userId)));
+  done();
+}
+
 export async function deletePurchase(id: string) {
   const userId = await requireUserId();
   await db.delete(purchases).where(and(eq(purchases.id, id), eq(purchases.userId, userId)));
@@ -184,6 +203,7 @@ export async function updateFixedExpense(id: string, input: unknown) {
       currency: f.currency,
       category: f.category,
       active: f.active,
+      occupiesLimit: f.occupiesLimit,
     })
     .where(and(eq(fixedExpenses.id, id), eq(fixedExpenses.userId, userId)));
   done();

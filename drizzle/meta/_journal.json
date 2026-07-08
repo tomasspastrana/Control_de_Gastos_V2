@@ -15,6 +15,13 @@
       "when": 1783463793690,
       "tag": "0001_loose_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783475125305,
+      "tag": "0002_loving_rattler",
+      "breakpoints": true
     }
   ]
 }

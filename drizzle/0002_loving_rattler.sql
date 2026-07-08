@@ -1,0 +1,1 @@
+ALTER TABLE "fixed_expenses" ADD COLUMN "occupies_limit" boolean DEFAULT true NOT NULL;

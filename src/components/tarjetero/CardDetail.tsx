@@ -25,13 +25,14 @@ interface Props {
   onPayAll: () => void;
   onPayDelta: (id: string, delta: number) => void;
   onDeletePurchase: (id: string) => void;
+  onEditPurchase: (p: Purchase) => void;
   onAddFixed: () => void;
   onEditFixed: (f: FixedExpense) => void;
   onToggleFixed: (f: FixedExpense) => void;
   onDeleteFixed: (id: string) => void;
 }
 
-export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAddPurchase, onDeleteCard, onPayAll, onPayDelta, onDeletePurchase, onAddFixed, onEditFixed, onToggleFixed, onDeleteFixed }: Props) {
+export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAddPurchase, onDeleteCard, onPayAll, onPayDelta, onDeletePurchase, onEditPurchase, onAddFixed, onEditFixed, onToggleFixed, onDeleteFixed }: Props) {
   const m = cardMetrics(card, purchases, rates, fixedExpenses);
   const ps = purchases.filter((p) => p.cardId === card.id);
   const cardFixed = fixedExpenses.filter((f) => f.cardId === card.id);
@@ -155,6 +156,7 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
                           onPay={() => onPayDelta(p.id, 1)}
                           onUnpay={() => onPayDelta(p.id, -1)}
                           onDelete={() => onDeletePurchase(p.id)}
+                          onEdit={() => onEditPurchase(p)}
                         />
                       </div>
                     </motion.div>
@@ -189,7 +191,11 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
                   <div key={fx.id} className="tj-glass-soft flex flex-wrap items-center gap-x-4 gap-y-2.5" style={{ padding: "14px 18px", borderRadius: 16, opacity: fx.active ? 1 : 0.55 }}>
                     <span style={{ width: 30, height: 30, borderRadius: 10, flex: "none", background: hexA(catColor(fx.category), 0.16) }} />
                     <div className="min-w-0 flex-1">
-                      <div className="text-[14px] font-extrabold tracking-tight">{fx.name}{!fx.active && <span className="ml-2 text-[11px] font-bold" style={{ color: "var(--tj-muted)" }}>· pausado</span>}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[14px] font-extrabold tracking-tight">{fx.name}</span>
+                        {!fx.occupiesLimit && <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: "rgba(120,110,180,.14)", color: "var(--tj-muted-2)" }}>no ocupa límite</span>}
+                        {!fx.active && <span className="text-[11px] font-bold" style={{ color: "var(--tj-muted)" }}>· pausado</span>}
+                      </div>
                       <div className="mt-px text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>{fx.category} · {fmtCur(fx.amount, fx.currency)}/mes</div>
                     </div>
                     <div className="text-right">

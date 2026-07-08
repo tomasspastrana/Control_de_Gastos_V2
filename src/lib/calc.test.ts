@@ -80,6 +80,7 @@ const fx = (over: Partial<FixedExpense>): FixedExpense => ({
   currency: "USD",
   category: "Ocio",
   active: true,
+  occupiesLimit: true,
   ...over,
 });
 
@@ -109,6 +110,21 @@ describe("cardMetrics with fixed expenses", () => {
     expect(m.debt).toBe(20_000);
     expect(m.monthly).toBe(20_000);
     expect(m.avail).toBe(1_000_000 - 20_000);
+  });
+
+  it("a maintenance commission (occupiesLimit=false) adds to monthly but not to debt/avail", () => {
+    const m = cardMetrics(
+      card,
+      [p({ paidInstallments: 12 })], // no purchase debt/monthly
+      rates,
+      [
+        fx({ id: "sub", cardId: "c1", amount: 20, currency: "USD", occupiesLimit: true }), // 20,000 → debt + monthly
+        fx({ id: "com", cardId: "c1", amount: 30_000, currency: "ARS", occupiesLimit: false }), // 30,000 → monthly only
+      ],
+    );
+    expect(m.debt).toBe(20_000);
+    expect(m.avail).toBe(1_000_000 - 20_000); // commission does NOT reduce avail
+    expect(m.monthly).toBe(50_000); // both are part of the monthly bill
   });
 });
 

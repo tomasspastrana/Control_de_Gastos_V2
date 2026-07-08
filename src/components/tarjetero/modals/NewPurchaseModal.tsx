@@ -13,9 +13,12 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onCreate: (purchase: Purchase) => void;
+  onUpdate: (id: string, purchase: Purchase) => void;
   cards: Card[];
   rates: Rates;
   defaultCardId: string;
+  /** Present = edit mode (prefills the form). */
+  initial?: Purchase | null;
 }
 
 const emptyForm = (cardId: string) => ({
@@ -29,18 +32,32 @@ const emptyForm = (cardId: string) => ({
   date: new Date().toISOString().slice(0, 10),
 });
 
-export function NewPurchaseModal({ open, onClose, onCreate, cards, rates, defaultCardId }: Props) {
-  const [f, setF] = useState(emptyForm(defaultCardId));
+type Form = ReturnType<typeof emptyForm>;
+
+const formFrom = (p: Purchase): Form => ({
+  cardId: p.cardId,
+  merchant: p.merchant,
+  amount: String(p.amount),
+  currency: p.currency,
+  installments: String(p.installments),
+  paidInstallments: String(p.paidInstallments),
+  category: p.category,
+  date: p.date,
+});
+
+export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, rates, defaultCardId, initial }: Props) {
+  const [f, setF] = useState<Form>(emptyForm(defaultCardId));
 
   useEffect(() => {
-    if (open) setF(emptyForm(defaultCardId));
-  }, [open, defaultCardId]);
+    if (open) setF(initial ? formFrom(initial) : emptyForm(defaultCardId));
+  }, [open, initial, defaultCardId]);
 
-  const set = <K extends keyof ReturnType<typeof emptyForm>>(k: K, v: (typeof f)[K]) =>
+  const set = <K extends keyof Form>(k: K, v: Form[K]) =>
     setF((prev) => ({ ...prev, [k]: v }));
 
   const preview = fmt(toAmount(f.amount) * rate(rates, f.currency));
   const hasCards = cards.length > 0;
+  const isEdit = !!initial;
 
   function submit() {
     const parsed = purchaseSchema.safeParse(f);
@@ -50,7 +67,7 @@ export function NewPurchaseModal({ open, onClose, onCreate, cards, rates, defaul
     }
     const d = parsed.data;
     const purchase: Purchase = {
-      id: uid("p"),
+      id: initial?.id ?? uid("p"),
       cardId: d.cardId,
       merchant: d.merchant || "Compra",
       amount: d.amount,
@@ -60,8 +77,13 @@ export function NewPurchaseModal({ open, onClose, onCreate, cards, rates, defaul
       category: d.category,
       date: d.date,
     };
-    onCreate(purchase);
-    toast.success("Compra agregada");
+    if (isEdit) {
+      onUpdate(purchase.id, purchase);
+      toast.success("Compra actualizada");
+    } else {
+      onCreate(purchase);
+      toast.success("Compra agregada");
+    }
     onClose();
   }
 
@@ -69,7 +91,7 @@ export function NewPurchaseModal({ open, onClose, onCreate, cards, rates, defaul
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="tj-modal">
         <DialogHeader>
-          <DialogTitle className="text-xl font-extrabold tracking-tight">Cargar compra en cuotas</DialogTitle>
+          <DialogTitle className="text-xl font-extrabold tracking-tight">{isEdit ? "Editar compra" : "Cargar compra en cuotas"}</DialogTitle>
         </DialogHeader>
 
         {hasCards ? (
@@ -127,7 +149,7 @@ export function NewPurchaseModal({ open, onClose, onCreate, cards, rates, defaul
                 <input type="date" className="tj-input" value={f.date} onChange={(e) => set("date", e.target.value)} />
               </div>
             </div>
-            <button onClick={submit} className="tj-submit mt-2">Agregar compra</button>
+            <button onClick={submit} className="tj-submit mt-2">{isEdit ? "Guardar cambios" : "Agregar compra"}</button>
           </div>
         ) : (
           <div className="px-2.5 py-8 text-center font-semibold" style={{ color: "#9a96b6" }}>

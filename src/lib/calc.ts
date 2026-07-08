@@ -130,11 +130,14 @@ export function cardMetrics(
       monthly += purchaseInstallment(p, rates);
     }
   });
-  // active fixed expenses charged to this card occupy one month of limit
-  // and are part of this month's bill
-  const fx = fixedMonthly(fixed.filter((f) => f.cardId === card.id), rates);
-  debt += fx;
-  monthly += fx;
+  // active fixed expenses charged to this card. Those that occupy limit add to
+  // debt AND to this month's bill; maintenance commissions (occupiesLimit=false)
+  // are paid monthly but do NOT reduce the limit, so they add to monthly only.
+  const cardFixed = fixed.filter((f) => f.cardId === card.id);
+  const fxOccupy = fixedMonthly(cardFixed.filter((f) => f.occupiesLimit), rates);
+  const fxNonOccupy = fixedMonthly(cardFixed.filter((f) => !f.occupiesLimit), rates);
+  debt += fxOccupy;
+  monthly += fxOccupy + fxNonOccupy;
   const limit = card.limit * rate(rates, card.limitCurrency || "ARS");
   const avail = limit - debt;
   const pct = limit > 0 ? Math.min(1, debt / limit) : 0;

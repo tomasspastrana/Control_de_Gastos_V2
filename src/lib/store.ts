@@ -8,6 +8,7 @@ export type Action =
   | { type: "ADD_CARD"; card: Card }
   | { type: "DELETE_CARD"; id: string }
   | { type: "ADD_PURCHASE"; purchase: Purchase }
+  | { type: "EDIT_PURCHASE"; id: string; patch: Partial<Purchase> }
   | { type: "DELETE_PURCHASE"; id: string }
   | { type: "PAY_DELTA"; id: string; delta: number }
   | { type: "PAY_CARD"; cardId: string }
@@ -41,6 +42,14 @@ export function reducer(state: AppData, action: Action): AppData {
 
     case "ADD_PURCHASE":
       return { ...state, purchases: [...state.purchases, action.purchase] };
+
+    case "EDIT_PURCHASE":
+      return {
+        ...state,
+        purchases: state.purchases.map((p) =>
+          p.id === action.id ? { ...p, ...action.patch } : p,
+        ),
+      };
 
     case "DELETE_PURCHASE":
       return { ...state, purchases: state.purchases.filter((p) => p.id !== action.id) };
