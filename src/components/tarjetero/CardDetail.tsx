@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import type { Card, FixedExpense, Purchase, Rates } from "@/lib/types";
 import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseInstallment, rate } from "@/lib/calc";
+import { fmtClosing, parseYmd, paymentAlert, purchaseStatement, ruleFromCard } from "@/lib/closing";
 import { updateCardClosing } from "@/app/actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CreditCardVisual } from "./CreditCardVisual";
@@ -37,6 +38,9 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
   const ps = purchases.filter((p) => p.cardId === card.id);
   const cardFixed = fixedExpenses.filter((f) => f.cardId === card.id);
 
+  const rule = ruleFromCard(card);
+  const alert = rule ? paymentAlert(rule, card.dueDays ?? null, m.debt > 0.5) : null;
+
   const [closingOpen, setClosingOpen] = useState(false);
   const [closingForm, setClosingForm] = useState<ClosingForm>(formFromCard(card));
   const [saving, setSaving] = useState(false);
@@ -64,6 +68,28 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
         ← Volver al inicio
       </button>
 
+      {alert && (
+        <div
+          className="mb-5 flex items-center gap-3 rounded-[16px] px-4 py-3.5"
+          style={{
+            border: `1px solid ${alert.level === "overdue" ? "rgba(214,69,90,.35)" : "rgba(232,185,78,.4)"}`,
+            background: alert.level === "overdue" ? "rgba(214,69,90,.08)" : "rgba(232,185,78,.12)",
+          }}
+        >
+          <span style={{ fontSize: 20, lineHeight: 1, flex: "none" }}>{alert.level === "overdue" ? "⚠️" : "⏰"}</span>
+          <div className="min-w-0">
+            <div className="text-[13.5px] font-extrabold" style={{ color: alert.level === "overdue" ? "var(--tj-danger)" : "#a9791f" }}>
+              {alert.level === "overdue" ? "Pago vencido" : "El pago vence pronto"}
+            </div>
+            <div className="text-[12px] font-semibold" style={{ color: "var(--tj-muted-2)" }}>
+              {alert.level === "overdue"
+                ? `Venció ${fmtClosing(alert.due)} · hace ${-alert.days} ${-alert.days === 1 ? "día" : "días"}`
+                : `Vence ${fmtClosing(alert.due)} · ${alert.days === 0 ? "es hoy" : alert.days === 1 ? "es mañana" : `en ${alert.days} días`}`}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="tj-detailgrid grid items-start gap-7" style={{ gridTemplateColumns: "minmax(0,340px) 1fr" }}>
         {/* left column */}
         <div className="flex flex-col gap-[18px]" style={{ position: "sticky", top: 20 }}>
@@ -80,7 +106,7 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
 
             <div style={{ borderTop: "1px solid rgba(120,110,180,.16)", marginTop: 14, paddingTop: 14, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
               {card.closingRuleType ? (
-                <ClosingInfo card={card} />
+                <ClosingInfo card={card} alert={alert?.level ?? null} />
               ) : (
                 <div className="text-[12px] font-semibold" style={{ color: "var(--tj-muted)" }}>Configurá el ciclo de cierre</div>
               )}
@@ -116,6 +142,7 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
                   const tot = p.amount * rate(rates, p.currency);
                   const per = purchaseInstallment(p, rates);
                   const rem = (tot * (p.installments - p.paidInstallments)) / p.installments;
+                  const stmt = rule ? purchaseStatement(rule, parseYmd(p.date), card.dueDays ?? null) : null;
                   return (
                     <motion.div
                       key={p.id}
@@ -133,6 +160,12 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
                           <div className="mt-px text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
                             {p.category} · {fmtDate(p.date)} · {fmtCur(per, "ARS")}/cuota
                           </div>
+                          {stmt && (
+                            <div className="mt-1 inline-flex flex-wrap items-center gap-1 text-[11px] font-semibold" style={{ color: "var(--tj-accent)" }}>
+                              <span aria-hidden>🧾</span> Resumen cierra {fmtClosing(stmt.closing)}
+                              {stmt.due && <span style={{ color: "var(--tj-muted)" }}>· vence {fmtClosing(stmt.due)}</span>}
+                            </div>
+                          )}
                         </div>
                         <div className="text-right">
                           <div className="text-base font-extrabold" style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(tot)}</div>

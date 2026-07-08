@@ -14,6 +14,7 @@ import {
   totals,
 } from "@/lib/calc";
 import { CreditCardVisual } from "./CreditCardVisual";
+import { CardAlerts } from "./CardAlerts";
 import { StatTile } from "./StatTile";
 import { ProgressBar } from "./ProgressBar";
 import { DonutChart } from "./DonutChart";
@@ -80,6 +81,9 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard,
           <div style={{ fontSize: "clamp(24px, 7vw, 30px)", fontWeight: 800, letterSpacing: "-.02em", color: "var(--tj-debt)", fontVariantNumeric: "tabular-nums" }}>{fmt(t.debt)}</div>
         </div>
       </div>
+
+      {/* payment-due alerts */}
+      <CardAlerts cards={data.cards} purchases={data.purchases} rates={data.rates} fixedExpenses={data.fixedExpenses} onOpenCard={onOpenCard} />
 
       {/* stat strip */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 16, marginBottom: 28 }}>

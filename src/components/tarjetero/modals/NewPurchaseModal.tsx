@@ -7,6 +7,7 @@ import { TjSelect } from "../TjSelect";
 import { purchaseSchema, toAmount } from "@/lib/schemas";
 import { uid } from "@/lib/id";
 import { fmt, rate } from "@/lib/calc";
+import { fmtClosing, nextClosing, parseYmd, purchaseStatement, ruleFromCard } from "@/lib/closing";
 import { CATEGORIES, CURRENCIES, type Card, type Currency, type Purchase, type Rates } from "@/lib/types";
 
 interface Props {
@@ -58,6 +59,13 @@ export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, rat
   const preview = fmt(toAmount(f.amount) * rate(rates, f.currency));
   const hasCards = cards.length > 0;
   const isEdit = !!initial;
+
+  // simulator: which statement this purchase falls into, given its date + the card's cycle
+  const simCard = cards.find((c) => c.id === f.cardId);
+  const simRule = simCard ? ruleFromCard(simCard) : null;
+  const sim = simRule && f.date ? purchaseStatement(simRule, parseYmd(f.date), simCard?.dueDays ?? null) : null;
+  // rolled = its statement is later than the current open one (loaded after this cycle's closing)
+  const rolled = !!(simRule && sim && sim.closing.getTime() > nextClosing(simRule).getTime());
 
   function submit() {
     const parsed = purchaseSchema.safeParse(f);
@@ -149,6 +157,28 @@ export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, rat
                 <input type="date" className="tj-input" value={f.date} onChange={(e) => set("date", e.target.value)} />
               </div>
             </div>
+
+            {/* simulator: statement this purchase lands in */}
+            {simCard && (
+              sim ? (
+                <div className="mb-1 rounded-[12px] px-3.5 py-2.5" style={{ background: "rgba(109,94,246,.08)", border: "1px solid rgba(109,94,246,.18)" }}>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-bold" style={{ color: "var(--tj-accent)" }}>
+                    <span>🧾 Entra al resumen que cierra el {fmtClosing(sim.closing)}</span>
+                    {rolled && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: "rgba(232,185,78,.2)", color: "#a9791f" }}>próximo resumen</span>}
+                  </div>
+                  {sim.due && (
+                    <div className="mt-0.5 text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
+                      La primera cuota vence el {fmtClosing(sim.due)}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mb-1 text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
+                  Configurá el ciclo de cierre de la tarjeta para simular en qué resumen cae.
+                </div>
+              )
+            )}
+
             <button onClick={submit} className="tj-submit mt-2">{isEdit ? "Guardar cambios" : "Agregar compra"}</button>
           </div>
         ) : (

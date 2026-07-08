@@ -127,6 +127,62 @@ export function dueDate(closing: Date, dueDays: number): Date {
   return nextBusinessDay(addDays(closing, dueDays));
 }
 
+/** Statement a purchase first lands in: the first closing on/after its date, plus its due date. */
+export function purchaseStatement(
+  rule: ClosingRule,
+  purchaseDate: Date,
+  dueDays: number | null,
+): { closing: Date; due: Date | null } {
+  const closing = nextClosing(rule, purchaseDate);
+  return { closing, due: dueDays != null ? dueDate(closing, dueDays) : null };
+}
+
+/** Most recent closing on or before `from` (the statement currently awaiting payment). */
+export function lastClosingOnOrBefore(rule: ClosingRule, from: Date = new Date()): Date | null {
+  const start = atMidnight(from);
+  if (rule.type === "fixed_day") {
+    for (let i = 0; i < 4; i++) {
+      const base = new Date(start.getFullYear(), start.getMonth() - i, 1);
+      const c = fixedClosingForMonth(base.getFullYear(), base.getMonth(), rule.day, rule.businessAdjust);
+      if (c <= start) return c;
+    }
+    return null;
+  }
+  // weekday_cycle: walk forward from the anchor keeping the last closing <= from
+  let c = parseYmd(rule.anchor);
+  if (c > start) return null; // anchor is already in the future
+  let gap = rule.nextGap;
+  let guard = 0;
+  while (guard++ < 240) {
+    const next = addDays(c, gap);
+    if (next > start) break;
+    c = next;
+    gap = gap === 28 ? 35 : 28;
+  }
+  return c;
+}
+
+/**
+ * Payment alert for a card's current (last-closed) statement.
+ * `hasDebt` gates the "overdue" state (proxy for unpaid). Returns null when nothing to flag.
+ */
+export function paymentAlert(
+  rule: ClosingRule,
+  dueDays: number | null,
+  hasDebt: boolean,
+  from: Date = new Date(),
+  dueSoonDays = 5,
+): { level: "due-soon" | "overdue"; due: Date; days: number } | null {
+  if (dueDays == null) return null;
+  const closing = lastClosingOnOrBefore(rule, from);
+  if (!closing) return null;
+  const due = dueDate(closing, dueDays);
+  const days = daysUntil(due, from);
+  if (days < 0) return hasDebt ? { level: "overdue", due, days } : null;
+  if (days <= dueSoonDays) return { level: "due-soon", due, days };
+  return null;
+}
+
 /** Whole days from `from` (today) until `date` (negative if past). */
 export function daysUntil(date: Date, from: Date = new Date()): number {
   return Math.round((atMidnight(date).getTime() - atMidnight(from).getTime()) / 86_400_000);
