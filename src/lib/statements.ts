@@ -10,7 +10,6 @@ export interface StatementItem {
   label: string;
   sub: string;
   amount: number; // ARS
-  paid: boolean;
   kind: "purchase" | "fixed";
 }
 
@@ -31,6 +30,7 @@ export function cardStatement(
   rates: Rates,
   year: number,
   month: number,
+  from: Date = new Date(),
 ): CardStatement {
   const rule = ruleFromCard(card);
   const base = { cardId: card.id, nickname: card.nickname };
@@ -46,27 +46,29 @@ export function cardStatement(
     if (p.cardId !== card.id) continue;
     const closings = upcomingClosings(rule, parseYmd(p.date), p.installments);
     const idx = closings.findIndex((c) => ymd(c) === key);
-    if (idx >= 0) {
+    // only installments that are still PENDING (paid ones belong to past statements)
+    if (idx >= 0 && idx >= p.paidInstallments) {
       items.push({
         label: p.merchant,
         sub: `cuota ${idx + 1}/${p.installments}`,
         amount: purchaseInstallment(p, rates),
-        paid: p.paidInstallments > idx,
         kind: "purchase",
       });
     }
   }
 
-  // recurring fixed expenses land in every monthly statement
-  for (const f of fixed) {
-    if (f.cardId !== card.id || !f.active) continue;
-    items.push({
-      label: f.name,
-      sub: f.occupiesLimit ? "gasto fijo" : "gasto fijo · no ocupa límite",
-      amount: f.amount * rate(rates, f.currency),
-      paid: false,
-      kind: "fixed",
-    });
+  // recurring fixed expenses only from the current month onward (still to pay)
+  const isPast = year * 12 + month < from.getFullYear() * 12 + from.getMonth();
+  if (!isPast) {
+    for (const f of fixed) {
+      if (f.cardId !== card.id || !f.active) continue;
+      items.push({
+        label: f.name,
+        sub: f.occupiesLimit ? "gasto fijo" : "gasto fijo · no ocupa límite",
+        amount: f.amount * rate(rates, f.currency),
+        kind: "fixed",
+      });
+    }
   }
 
   const total = items.reduce((s, i) => s + i.amount, 0);
@@ -87,10 +89,11 @@ export function generalStatement(
   rates: Rates,
   year: number,
   month: number,
+  from: Date = new Date(),
 ): GeneralStatement {
   const perCard = cards
-    .map((c) => cardStatement(c, purchases, fixed, rates, year, month))
-    .filter((s) => s.closing !== null);
+    .map((c) => cardStatement(c, purchases, fixed, rates, year, month, from))
+    .filter((s) => s.items.length > 0);
   const total = perCard.reduce((s, c) => s + c.total, 0);
   return { total, perCard };
 }

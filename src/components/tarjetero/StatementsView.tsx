@@ -32,7 +32,8 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, onOpenC
   };
 
   const general = useMemo(
-    () => generalStatement(cards, purchases, fixedExpenses, rates, anchor.y, anchor.m),
+    () => generalStatement(cards, purchases, fixedExpenses, rates, anchor.y, anchor.m, today),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [cards, purchases, fixedExpenses, rates, anchor],
   );
 
@@ -40,9 +41,10 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, onOpenC
   const projection = useMemo(() => {
     return [1, 2, 3].map((k) => {
       const d = new Date(anchor.y, anchor.m + k, 1);
-      const g = generalStatement(cards, purchases, fixedExpenses, rates, d.getFullYear(), d.getMonth());
+      const g = generalStatement(cards, purchases, fixedExpenses, rates, d.getFullYear(), d.getMonth(), today);
       return { key: `${d.getFullYear()}-${d.getMonth()}`, label: monthLabel(d.getFullYear(), d.getMonth()), total: g.total };
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards, purchases, fixedExpenses, rates, anchor]);
 
   const navBtn = (label: string, onClick: () => void) => (
@@ -86,7 +88,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, onOpenC
         </div>
       ) : (
         <div className="mb-4 max-w-[720px] rounded-[20px] px-5 py-10 text-center text-sm font-semibold" style={{ background: "rgba(255,255,255,.5)", border: "1px dashed rgba(109,94,246,.3)", color: "#9a96b6" }}>
-          Ninguna tarjeta cierra resumen en {monthLabel(anchor.y, anchor.m)}.
+          Nada a pagar en {monthLabel(anchor.y, anchor.m)}.
         </div>
       )}
 
@@ -118,12 +120,12 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, onOpenC
               <div className="flex flex-col gap-1.5">
                 {c.items.map((it, i) => (
                   <div key={i} className="flex items-center gap-2.5 py-1.5" style={{ borderTop: "1px solid rgba(120,110,180,.1)" }}>
-                    <span style={{ fontSize: 13, flex: "none" }}>{it.kind === "fixed" ? "🔁" : it.paid ? "✅" : "🧾"}</span>
+                    <span style={{ width: 9, height: 9, borderRadius: 3, flex: "none", background: it.kind === "fixed" ? "var(--tj-muted-2)" : "var(--tj-accent)" }} />
                     <div className="min-w-0 flex-1">
                       <div className="text-[13px] font-bold" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</div>
-                      <div className="text-[11px] font-semibold" style={{ color: "var(--tj-muted)" }}>{it.sub}{it.paid ? " · pagada" : ""}</div>
+                      <div className="text-[11px] font-semibold" style={{ color: "var(--tj-muted)" }}>{it.sub}</div>
                     </div>
-                    <span className="text-[13px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: it.paid ? "var(--tj-muted)" : "var(--tj-ink)" }}>{fmt(it.amount)}</span>
+                    <span className="text-[13px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-ink)" }}>{fmt(it.amount)}</span>
                   </div>
                 ))}
               </div>
@@ -132,7 +134,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, onOpenC
         </div>
       ) : (
         <div className="max-w-[720px] rounded-[20px] px-5 py-10 text-center text-sm font-semibold" style={{ background: "rgba(255,255,255,.5)", border: "1px dashed rgba(109,94,246,.3)", color: "#9a96b6" }}>
-          Sin resúmenes de tarjetas este mes.
+          Ninguna tarjeta tiene cuotas ni gastos pendientes este mes.
         </div>
       )}
     </motion.div>

@@ -81,13 +81,24 @@ export function nextClosing(rule: ClosingRule, from: Date = new Date()): Date {
     // fallback (shouldn't happen)
     return fixedClosingForMonth(start.getFullYear(), start.getMonth() + 1, rule.day, rule.businessAdjust);
   }
-  // weekday_cycle
+  // weekday_cycle: walk forward from the anchor, or backward when `start` predates it
   let c = parseYmd(rule.anchor);
-  let gap = rule.nextGap;
   let guard = 0;
-  while (c < start && guard++ < 240) {
-    c = addDays(c, gap);
-    gap = gap === 28 ? 35 : 28;
+  if (c < start) {
+    let gap = rule.nextGap; // gap from c to the following closing
+    while (c < start && guard++ < 600) {
+      c = addDays(c, gap);
+      gap = gap === 28 ? 35 : 28;
+    }
+  } else {
+    // step backward while the previous closing is still >= start
+    let gapBack = rule.nextGap === 28 ? 35 : 28; // gap between the previous closing and the anchor
+    while (guard++ < 600) {
+      const prev = addDays(c, -gapBack);
+      if (prev < start) break;
+      c = prev;
+      gapBack = gapBack === 28 ? 35 : 28;
+    }
   }
   return c;
 }
@@ -98,32 +109,14 @@ export function closingInMonth(rule: ClosingRule, year: number, month: number): 
   return c.getFullYear() === year && c.getMonth() === month ? c : null;
 }
 
-/** The next `n` closing dates starting at nextClosing(from). */
+/** The next `n` closing dates starting at nextClosing(from). Iterates nextClosing so it
+ *  stays correct for both rule shapes and for dates before a weekday_cycle anchor. */
 export function upcomingClosings(rule: ClosingRule, from: Date = new Date(), n = 3): Date[] {
   const out: Date[] = [];
   let c = nextClosing(rule, from);
-  out.push(c);
-  if (rule.type === "fixed_day") {
-    for (let i = 1; i < n; i++) {
-      const base = new Date(c.getFullYear(), c.getMonth() + 1, 1);
-      c = fixedClosingForMonth(base.getFullYear(), base.getMonth(), rule.day, rule.businessAdjust);
-      out.push(c);
-    }
-  } else {
-    // continue alternating from the gap that follows the current closing
-    let steps = 0;
-    let cursor = parseYmd(rule.anchor);
-    let gap = rule.nextGap;
-    // fast-forward gap phase to `c`
-    while (cursor < c && steps++ < 240) {
-      cursor = addDays(cursor, gap);
-      gap = gap === 28 ? 35 : 28;
-    }
-    for (let i = 1; i < n; i++) {
-      c = addDays(c, gap);
-      gap = gap === 28 ? 35 : 28;
-      out.push(c);
-    }
+  for (let i = 0; i < n; i++) {
+    out.push(c);
+    c = nextClosing(rule, addDays(c, 1));
   }
   return out;
 }
@@ -171,18 +164,27 @@ export function lastClosingOnOrBefore(rule: ClosingRule, from: Date = new Date()
     }
     return null;
   }
-  // weekday_cycle: walk forward from the anchor keeping the last closing <= from
+  // weekday_cycle
   let c = parseYmd(rule.anchor);
-  if (c > start) return null; // anchor is already in the future
-  let gap = rule.nextGap;
   let guard = 0;
-  while (guard++ < 240) {
-    const next = addDays(c, gap);
-    if (next > start) break;
-    c = next;
-    gap = gap === 28 ? 35 : 28;
+  if (c <= start) {
+    // walk forward keeping the last closing <= start
+    let gap = rule.nextGap;
+    while (guard++ < 600) {
+      const next = addDays(c, gap);
+      if (next > start) break;
+      c = next;
+      gap = gap === 28 ? 35 : 28;
+    }
+    return c;
   }
-  return c;
+  // anchor is in the future: step backward until a closing is <= start
+  let gapBack = rule.nextGap === 28 ? 35 : 28;
+  while (c > start && guard++ < 600) {
+    c = addDays(c, -gapBack);
+    gapBack = gapBack === 28 ? 35 : 28;
+  }
+  return c <= start ? c : null;
 }
 
 /**

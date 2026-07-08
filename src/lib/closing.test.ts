@@ -47,6 +47,17 @@ describe("weekday_cycle (BBVA Francés)", () => {
   });
 });
 
+describe("weekday_cycle antes del ancla (camina hacia atrás)", () => {
+  const rule: ClosingRule = { type: "weekday_cycle", ...deriveWeekdayCycle("2026-04-23", "2026-05-21") };
+  it("nextClosing con fecha anterior al ancla no se queda en el ancla", () => {
+    expect(ymd(nextClosing(rule, parseYmd("2026-01-01")))).toBe("2026-01-15");
+  });
+  it("una compra vieja reparte las cuotas mes a mes (no se amontonan en el ancla)", () => {
+    const cs = upcomingClosings(rule, parseYmd("2025-12-24"), 6).map(ymd);
+    expect(cs).toEqual(["2026-01-15", "2026-02-19", "2026-03-19", "2026-04-23", "2026-05-21", "2026-06-25"]);
+  });
+});
+
 describe("weekday_cycle (Banco Patagonia)", () => {
   const rule: ClosingRule = { type: "weekday_cycle", ...deriveWeekdayCycle("2026-02-26", "2026-03-26") };
   it("predice 26-mar → 30-abr → 28-may", () => {
