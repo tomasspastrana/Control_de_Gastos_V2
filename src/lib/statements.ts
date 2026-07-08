@@ -11,6 +11,7 @@ export interface StatementItem {
   sub: string;
   amount: number; // ARS
   kind: "purchase" | "fixed";
+  purchaseId?: string; // set for purchase items → the installment "Pagar tarjeta" advances
 }
 
 export interface CardStatement {
@@ -53,6 +54,7 @@ export function cardStatement(
         sub: `cuota ${idx + 1}/${p.installments}`,
         amount: purchaseInstallment(p, rates),
         kind: "purchase",
+        purchaseId: p.id,
       });
     }
   }
@@ -74,6 +76,46 @@ export function cardStatement(
   const total = items.reduce((s, i) => s + i.amount, 0);
   const due = card.dueDays != null ? dueDate(closing, card.dueDays) : null;
   return { ...base, closing, due, items, total };
+}
+
+/**
+ * The card's "current statement to pay" (this calendar month). For cards with a billing
+ * cycle it's the month's statement; without a cycle it falls back to one pending installment
+ * per purchase + active fixed. This is what "Pagar tarjeta" and "A pagar este mes" use, so
+ * those figures match the Resúmenes view exactly.
+ */
+export function currentStatement(
+  card: Card,
+  purchases: Purchase[],
+  fixed: FixedExpense[],
+  rates: Rates,
+  from: Date = new Date(),
+): CardStatement {
+  const rule = ruleFromCard(card);
+  if (rule) return cardStatement(card, purchases, fixed, rates, from.getFullYear(), from.getMonth(), from);
+
+  const items: StatementItem[] = [];
+  for (const p of purchases) {
+    if (p.cardId !== card.id || p.paidInstallments >= p.installments) continue;
+    items.push({
+      label: p.merchant,
+      sub: `cuota ${p.paidInstallments + 1}/${p.installments}`,
+      amount: purchaseInstallment(p, rates),
+      kind: "purchase",
+      purchaseId: p.id,
+    });
+  }
+  for (const f of fixed) {
+    if (f.cardId !== card.id || !f.active) continue;
+    items.push({
+      label: f.name,
+      sub: f.occupiesLimit ? "gasto fijo" : "gasto fijo · no ocupa límite",
+      amount: f.amount * rate(rates, f.currency),
+      kind: "fixed",
+    });
+  }
+  const total = items.reduce((s, i) => s + i.amount, 0);
+  return { cardId: card.id, nickname: card.nickname, closing: null, due: null, items, total };
 }
 
 export interface GeneralStatement {

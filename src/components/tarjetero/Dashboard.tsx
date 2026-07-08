@@ -13,6 +13,7 @@ import {
   fmtShort,
   totals,
 } from "@/lib/calc";
+import { generalStatement } from "@/lib/statements";
 import { CreditCardVisual } from "./CreditCardVisual";
 import { CardAlerts } from "./CardAlerts";
 import { StatTile } from "./StatTile";
@@ -62,6 +63,9 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard,
   const t = totals(data.cards, data.purchases, data.rates, data.fixedExpenses);
   const breakdown = categoryBreakdown(data.purchases, data.rates);
   const fixedTotal = fixedMonthly(data.fixedExpenses, data.rates);
+  // "A pagar este mes" = this month's combined statement (same figure as Resúmenes)
+  const now = new Date();
+  const monthlyDue = generalStatement(data.cards, data.purchases, data.fixedExpenses, data.rates, now.getFullYear(), now.getMonth(), now).total;
 
   const cardName = (id: string) => data.cards.find((c) => c.id === id)?.nickname ?? "—";
   const recent = [...data.purchases]
@@ -87,7 +91,7 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard,
 
       {/* stat strip */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 16, marginBottom: 28 }}>
-        <StatTile label="A pagar este mes · resúmenes" value={fmt(t.monthly)} valueColor="var(--tj-debt)" />
+        <StatTile label="A pagar este mes · resúmenes" value={fmt(monthlyDue)} valueColor="var(--tj-debt)" />
         <StatTile label="Límite total" value={fmt(t.limit)} />
         <StatTile label="Disponible total" value={fmt(t.avail)} valueColor="var(--tj-good)" />
         {fixedTotal > 0.5 ? (

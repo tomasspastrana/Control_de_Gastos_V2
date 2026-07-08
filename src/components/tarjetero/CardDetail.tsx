@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import type { Card, FixedExpense, Purchase, Rates } from "@/lib/types";
 import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseInstallment, rate } from "@/lib/calc";
 import { fmtClosing, installmentStatement, parseYmd, paymentAlert, ruleFromCard } from "@/lib/closing";
+import { currentStatement } from "@/lib/statements";
 import { updateCardClosing } from "@/app/actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CreditCardVisual } from "./CreditCardVisual";
@@ -23,7 +24,7 @@ interface Props {
   onBack: () => void;
   onAddPurchase: () => void;
   onDeleteCard: () => void;
-  onPayAll: () => void;
+  onPayAll: (ids: string[]) => void;
   onPayDelta: (id: string, delta: number) => void;
   onDeletePurchase: (id: string) => void;
   onEditPurchase: (p: Purchase) => void;
@@ -40,6 +41,9 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
 
   const rule = ruleFromCard(card);
   const alert = rule ? paymentAlert(rule, card.dueDays ?? null, m.debt > 0.5, card.lastPaymentAt ?? null) : null;
+  // "Pagar tarjeta" = this month's statement (matches the Resúmenes total exactly)
+  const stmt = currentStatement(card, purchases, fixedExpenses, rates);
+  const payIds = stmt.items.filter((i) => i.purchaseId).map((i) => i.purchaseId!);
 
   const [closingOpen, setClosingOpen] = useState(false);
   const [closingForm, setClosingForm] = useState<ClosingForm>(formFromCard(card));
@@ -116,9 +120,9 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
             </div>
           </div>
 
-          {m.monthly > 0.5 && (
-            <button onClick={onPayAll} className="flex cursor-pointer items-center justify-center gap-2 rounded-[15px] border-none p-[13px] text-[13.5px] font-extrabold text-white" style={{ background: "#1c1c22", boxShadow: "0 10px 24px rgba(28,28,34,.28)" }}>
-              ✓ Pagar tarjeta · {fmt(m.monthly)}
+          {stmt.total > 0.5 && (
+            <button onClick={() => onPayAll(payIds)} className="flex cursor-pointer items-center justify-center gap-2 rounded-[15px] border-none p-[13px] text-[13.5px] font-extrabold text-white" style={{ background: "#1c1c22", boxShadow: "0 10px 24px rgba(28,28,34,.28)" }}>
+              ✓ Pagar tarjeta · {fmt(stmt.total)}
             </button>
           )}
           <button onClick={onDeleteCard} className="cursor-pointer rounded-[14px] p-[11px] text-[12.5px] font-bold" style={{ border: "1px solid rgba(214,69,90,.3)", background: "rgba(214,69,90,.06)", color: "var(--tj-danger)" }}>

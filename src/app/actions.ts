@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { cards, debts, fixedExpenses, profiles, purchases } from "@/db/schema";
 import { createClient } from "@/lib/supabase/server";
@@ -125,15 +125,17 @@ export async function payPurchaseDelta(id: string, delta: number) {
   done();
 }
 
-export async function payCard(cardId: string) {
+export async function payCard(cardId: string, ids: string[]) {
   const userId = await requireUserId();
-  // pay this month's bill: advance one installment on each purchase of the card
-  await db
-    .update(purchases)
-    .set({
-      paidInstallments: sql`least(${purchases.installments}, ${purchases.paidInstallments} + 1)`,
-    })
-    .where(and(eq(purchases.cardId, cardId), eq(purchases.userId, userId)));
+  // pay this statement: advance one installment only on the purchases billed this month
+  if (ids.length > 0) {
+    await db
+      .update(purchases)
+      .set({
+        paidInstallments: sql`least(${purchases.installments}, ${purchases.paidInstallments} + 1)`,
+      })
+      .where(and(inArray(purchases.id, ids), eq(purchases.userId, userId)));
+  }
   // stamp the payment day so the payment-due alert clears for this statement
   await db
     .update(cards)

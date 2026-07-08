@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import type { Card, FixedExpense, Purchase, Rates } from "@/lib/types";
 import { fmt } from "@/lib/calc";
-import { fmtClosing } from "@/lib/closing";
-import { generalStatement } from "@/lib/statements";
+import { fmtClosing, ruleFromCard } from "@/lib/closing";
+import { cardStatement, generalStatement } from "@/lib/statements";
 import { StatTile } from "./StatTile";
 
 interface Props {
@@ -46,6 +46,13 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, onOpenC
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards, purchases, fixedExpenses, rates, anchor]);
+
+  // every card (so all of them are visible in "Por tarjeta", even with nothing due)
+  const perCardAll = useMemo(
+    () => cards.map((c) => ({ card: c, stmt: cardStatement(c, purchases, fixedExpenses, rates, anchor.y, anchor.m, today) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cards, purchases, fixedExpenses, rates, anchor],
+  );
 
   const navBtn = (label: string, onClick: () => void) => (
     <button onClick={onClick} className="cursor-pointer rounded-[11px] px-3 py-2 text-[13px] font-bold" style={{ border: "1px solid rgba(120,110,180,.22)", background: "rgba(255,255,255,.6)", color: "var(--tj-debt)" }}>
@@ -99,42 +106,54 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, onOpenC
         ))}
       </div>
 
-      {/* PER CARD */}
+      {/* PER CARD — every card is shown, with an empty state when nothing is due */}
       <h2 className="mb-3 text-[17px] font-extrabold tracking-tight">Por tarjeta</h2>
-      {general.perCard.length > 0 ? (
+      {cards.length > 0 ? (
         <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))" }}>
-          {general.perCard.map((c) => (
-            <div key={c.cardId} className="tj-glass-soft" style={{ padding: 20, borderRadius: 22 }}>
-              <button onClick={() => onOpenCard(c.cardId)} className="mb-3 flex w-full cursor-pointer items-start justify-between gap-3 border-none bg-transparent p-0 text-left">
-                <div className="min-w-0">
-                  <div className="text-[15.5px] font-extrabold tracking-tight">{c.nickname}</div>
-                  <div className="mt-px text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
-                    {c.closing && <>cierra {fmtClosing(c.closing)}</>}{c.due && <> · vence {fmtClosing(c.due)}</>}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-base font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-debt)" }}>{fmt(c.total)}</div>
-                  <div className="text-[10.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>total del mes</div>
-                </div>
-              </button>
-              <div className="flex flex-col gap-1.5">
-                {c.items.map((it, i) => (
-                  <div key={i} className="flex items-center gap-2.5 py-1.5" style={{ borderTop: "1px solid rgba(120,110,180,.1)" }}>
-                    <span style={{ width: 9, height: 9, borderRadius: 3, flex: "none", background: it.kind === "fixed" ? "var(--tj-muted-2)" : "var(--tj-accent)" }} />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[13px] font-bold" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</div>
-                      <div className="text-[11px] font-semibold" style={{ color: "var(--tj-muted)" }}>{it.sub}</div>
+          {perCardAll.map(({ card, stmt }) => {
+            const hasRule = !!ruleFromCard(card);
+            const emptyMsg = !hasRule
+              ? "Configurá el ciclo de cierre para ver su resumen."
+              : !stmt.closing
+                ? `No cierra resumen en ${monthLabel(anchor.y, anchor.m)}.`
+                : "Sin cuotas ni gastos pendientes este mes.";
+            return (
+              <div key={card.id} className="tj-glass-soft" style={{ padding: 20, borderRadius: 22 }}>
+                <button onClick={() => onOpenCard(card.id)} className="mb-3 flex w-full cursor-pointer items-start justify-between gap-3 border-none bg-transparent p-0 text-left">
+                  <div className="min-w-0">
+                    <div className="text-[15.5px] font-extrabold tracking-tight">{card.nickname}</div>
+                    <div className="mt-px text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
+                      {stmt.closing ? <>cierra {fmtClosing(stmt.closing)}</> : "sin cierre este mes"}{stmt.due && <> · vence {fmtClosing(stmt.due)}</>}
                     </div>
-                    <span className="text-[13px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-ink)" }}>{fmt(it.amount)}</span>
                   </div>
-                ))}
+                  <div className="text-right">
+                    <div className="text-base font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-debt)" }}>{fmt(stmt.total)}</div>
+                    <div className="text-[10.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>total del mes</div>
+                  </div>
+                </button>
+                {stmt.items.length > 0 ? (
+                  <div className="flex flex-col gap-1.5">
+                    {stmt.items.map((it, i) => (
+                      <div key={i} className="flex items-center gap-2.5 py-1.5" style={{ borderTop: "1px solid rgba(120,110,180,.1)" }}>
+                        <span style={{ width: 9, height: 9, borderRadius: 3, flex: "none", background: it.kind === "fixed" ? "var(--tj-muted-2)" : "var(--tj-accent)" }} />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] font-bold" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</div>
+                          <div className="text-[11px] font-semibold" style={{ color: "var(--tj-muted)" }}>{it.sub}</div>
+                        </div>
+                        <span className="text-[13px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-ink)" }}>{fmt(it.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-2 text-[12px] font-semibold" style={{ color: "var(--tj-muted)" }}>{emptyMsg}</div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="max-w-[720px] rounded-[20px] px-5 py-10 text-center text-sm font-semibold" style={{ background: "rgba(255,255,255,.5)", border: "1px dashed rgba(109,94,246,.3)", color: "#9a96b6" }}>
-          Ninguna tarjeta tiene cuotas ni gastos pendientes este mes.
+          Todavía no tenés tarjetas.
         </div>
       )}
     </motion.div>
