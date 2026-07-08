@@ -134,6 +134,11 @@ export async function payCard(cardId: string) {
       paidInstallments: sql`least(${purchases.installments}, ${purchases.paidInstallments} + 1)`,
     })
     .where(and(eq(purchases.cardId, cardId), eq(purchases.userId, userId)));
+  // stamp the payment day so the payment-due alert clears for this statement
+  await db
+    .update(cards)
+    .set({ lastPaymentAt: new Date().toISOString().slice(0, 10) })
+    .where(and(eq(cards.id, cardId), eq(cards.userId, userId)));
   done();
 }
 

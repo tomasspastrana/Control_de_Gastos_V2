@@ -25,6 +25,7 @@ function toCard(r: CardRow): Card {
     closingAnchor: r.closingAnchor,
     closingNextGap: r.closingNextGap,
     dueDays: r.dueDays,
+    lastPaymentAt: r.lastPaymentAt,
   };
 }
 

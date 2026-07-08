@@ -39,7 +39,7 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
   const cardFixed = fixedExpenses.filter((f) => f.cardId === card.id);
 
   const rule = ruleFromCard(card);
-  const alert = rule ? paymentAlert(rule, card.dueDays ?? null, m.debt > 0.5) : null;
+  const alert = rule ? paymentAlert(rule, card.dueDays ?? null, m.debt > 0.5, card.lastPaymentAt ?? null) : null;
 
   const [closingOpen, setClosingOpen] = useState(false);
   const [closingForm, setClosingForm] = useState<ClosingForm>(formFromCard(card));

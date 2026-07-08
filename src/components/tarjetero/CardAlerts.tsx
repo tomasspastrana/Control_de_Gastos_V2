@@ -26,7 +26,7 @@ export function CardAlerts({ cards, purchases, rates, fixedExpenses, onOpenCard 
     const rule = ruleFromCard(c);
     if (!rule) continue;
     const m = cardMetrics(c, purchases, rates, fixedExpenses);
-    const a = paymentAlert(rule, c.dueDays ?? null, m.debt > 0.5);
+    const a = paymentAlert(rule, c.dueDays ?? null, m.debt > 0.5, c.lastPaymentAt ?? null);
     if (a) items.push({ id: c.id, nickname: c.nickname, level: a.level, days: a.days });
   }
   if (items.length === 0) return null;

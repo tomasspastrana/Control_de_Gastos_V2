@@ -164,21 +164,27 @@ export function lastClosingOnOrBefore(rule: ClosingRule, from: Date = new Date()
 
 /**
  * Payment alert for a card's current (last-closed) statement.
- * `hasDebt` gates the "overdue" state (proxy for unpaid). Returns null when nothing to flag.
+ * - `hasDebt`: there's something to pay (a fully paid-off card never alerts).
+ * - `lastPaymentAt` (yyyy-mm-dd): if the card was paid on/after the current statement's
+ *   closing, the statement is considered settled → no alert (fixes the "stuck overdue" bug).
+ * Returns null when nothing to flag.
  */
 export function paymentAlert(
   rule: ClosingRule,
   dueDays: number | null,
   hasDebt: boolean,
+  lastPaymentAt: string | null = null,
   from: Date = new Date(),
   dueSoonDays = 5,
 ): { level: "due-soon" | "overdue"; due: Date; days: number } | null {
-  if (dueDays == null) return null;
+  if (dueDays == null || !hasDebt) return null;
   const closing = lastClosingOnOrBefore(rule, from);
   if (!closing) return null;
+  // already paid this statement (payment on/after it closed)
+  if (lastPaymentAt && parseYmd(lastPaymentAt) >= closing) return null;
   const due = dueDate(closing, dueDays);
   const days = daysUntil(due, from);
-  if (days < 0) return hasDebt ? { level: "overdue", due, days } : null;
+  if (days < 0) return { level: "overdue", due, days };
   if (days <= dueSoonDays) return { level: "due-soon", due, days };
   return null;
 }

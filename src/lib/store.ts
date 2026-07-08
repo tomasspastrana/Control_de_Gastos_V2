@@ -11,7 +11,7 @@ export type Action =
   | { type: "EDIT_PURCHASE"; id: string; patch: Partial<Purchase> }
   | { type: "DELETE_PURCHASE"; id: string }
   | { type: "PAY_DELTA"; id: string; delta: number }
-  | { type: "PAY_CARD"; cardId: string }
+  | { type: "PAY_CARD"; cardId: string; at: string }
   | { type: "ADD_DEBT"; debt: Debt }
   | { type: "DELETE_DEBT"; id: string }
   | { type: "PAY_DEBT_DELTA"; id: string; delta: number }
@@ -65,9 +65,13 @@ export function reducer(state: AppData, action: Action): AppData {
       };
 
     case "PAY_CARD":
-      // pay this month's bill: advance one installment on each purchase of the card
+      // pay this month's bill: advance one installment on each purchase of the card,
+      // and record the payment day so the payment-due alert clears
       return {
         ...state,
+        cards: state.cards.map((c) =>
+          c.id === action.cardId ? { ...c, lastPaymentAt: action.at } : c,
+        ),
         purchases: state.purchases.map((p) =>
           p.cardId === action.cardId
             ? { ...p, paidInstallments: clamp(p.paidInstallments + 1, 0, p.installments) }

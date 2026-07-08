@@ -26,6 +26,7 @@ export interface Card {
   closingAnchor?: string | null; // yyyy-mm-dd
   closingNextGap?: number | null; // 28 | 35
   dueDays?: number | null;
+  lastPaymentAt?: string | null; // yyyy-mm-dd, day the statement was last paid
 }
 
 export interface Purchase {

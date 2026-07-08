@@ -148,6 +148,7 @@ export interface Totals {
   debt: number;
   limit: number;
   avail: number;
+  monthly: number; // sum of every card's current statement ("cuota de este mes")
 }
 
 export function totals(
@@ -158,14 +159,16 @@ export function totals(
 ): Totals {
   let debt = 0,
     limit = 0,
-    avail = 0;
+    avail = 0,
+    monthly = 0;
   cards.forEach((c) => {
     const m = cardMetrics(c, purchases, rates, fixed);
     debt += m.debt;
     limit += m.limit;
     avail += m.avail;
+    monthly += m.monthly;
   });
-  return { debt, limit, avail };
+  return { debt, limit, avail, monthly };
 }
 
 // ---------- category breakdown ----------

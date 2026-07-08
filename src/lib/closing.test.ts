@@ -97,22 +97,31 @@ describe("paymentAlert", () => {
   const uala: ClosingRule = { type: "fixed_day", day: 30, businessAdjust: true };
   it("due-soon: faltan pocos días para el vencimiento", () => {
     // cierre 30-jun, vence 08-jul; hoy 06-jul → faltan 2 días
-    const a = paymentAlert(uala, 8, true, parseYmd("2026-07-06"));
+    const a = paymentAlert(uala, 8, true, null, parseYmd("2026-07-06"));
     expect(a?.level).toBe("due-soon");
     expect(a?.days).toBe(2);
   });
   it("overdue: venció y hay deuda", () => {
-    const a = paymentAlert(uala, 8, true, parseYmd("2026-07-10")); // vence 08-jul
+    const a = paymentAlert(uala, 8, true, null, parseYmd("2026-07-10")); // vence 08-jul
     expect(a?.level).toBe("overdue");
     expect(a?.days).toBeLessThan(0);
   });
-  it("sin deuda no marca overdue", () => {
-    expect(paymentAlert(uala, 8, false, parseYmd("2026-07-10"))).toBeNull();
+  it("sin deuda no marca nada", () => {
+    expect(paymentAlert(uala, 8, false, null, parseYmd("2026-07-10"))).toBeNull();
   });
   it("lejos del vencimiento no marca nada", () => {
-    expect(paymentAlert(uala, 8, true, parseYmd("2026-07-01"))).toBeNull(); // vence 08-jul, 7 días
+    expect(paymentAlert(uala, 8, true, null, parseYmd("2026-07-01"))).toBeNull(); // vence 08-jul, 7 días
   });
   it("sin dueDays no marca nada", () => {
-    expect(paymentAlert(uala, null, true, parseYmd("2026-07-10"))).toBeNull();
+    expect(paymentAlert(uala, null, true, null, parseYmd("2026-07-10"))).toBeNull();
+  });
+  it("pagada: pago on/after el cierre del resumen → sin aviso aunque haya vencido", () => {
+    // cierre del resumen actual = 30-jun; pagó el 01-jul → resumen saldado
+    expect(paymentAlert(uala, 8, true, "2026-07-01", parseYmd("2026-07-10"))).toBeNull();
+  });
+  it("pago viejo (antes del cierre actual) no cuenta como pagado", () => {
+    // pago 20-jun es anterior al cierre 30-jun → sigue vencida
+    const a = paymentAlert(uala, 8, true, "2026-06-20", parseYmd("2026-07-10"));
+    expect(a?.level).toBe("overdue");
   });
 });

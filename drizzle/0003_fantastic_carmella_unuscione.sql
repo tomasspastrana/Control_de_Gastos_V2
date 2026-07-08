@@ -1,0 +1,1 @@
+ALTER TABLE "cards" ADD COLUMN "last_payment_at" date;

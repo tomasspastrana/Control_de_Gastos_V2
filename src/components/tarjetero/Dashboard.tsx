@@ -87,6 +87,7 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard,
 
       {/* stat strip */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 16, marginBottom: 28 }}>
+        <StatTile label="A pagar este mes · resúmenes" value={fmt(t.monthly)} valueColor="var(--tj-debt)" />
         <StatTile label="Límite total" value={fmt(t.limit)} />
         <StatTile label="Disponible total" value={fmt(t.avail)} valueColor="var(--tj-good)" />
         {fixedTotal > 0.5 ? (

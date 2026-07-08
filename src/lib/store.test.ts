@@ -43,13 +43,14 @@ describe("reducer", () => {
     expect(paid(s)).toBe(0);
   });
 
-  it("PAY_CARD advances one installment per purchase (this month's bill), clamped", () => {
+  it("PAY_CARD advances one installment per purchase (this month's bill), clamped, and stamps lastPaymentAt", () => {
     // 2/6 → 3/6 after paying the card once
-    const s = reducer(base(), { type: "PAY_CARD", cardId: "c1" });
+    const s = reducer(base(), { type: "PAY_CARD", cardId: "c1", at: "2026-07-08" });
     expect(s.purchases[0].paidInstallments).toBe(3);
+    expect(s.cards[0].lastPaymentAt).toBe("2026-07-08");
     // never exceeds the total number of installments
     let f = base();
-    for (let i = 0; i < 10; i++) f = reducer(f, { type: "PAY_CARD", cardId: "c1" });
+    for (let i = 0; i < 10; i++) f = reducer(f, { type: "PAY_CARD", cardId: "c1", at: "2026-07-08" });
     expect(f.purchases[0].paidInstallments).toBe(6);
   });
 

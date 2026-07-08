@@ -26,6 +26,12 @@ export function DebtsView({ debts, rates, fixedExpenses, onAddDebt, onPayDebtDel
     const tot = d.amount * rate(rates, d.currency);
     return s + (tot * (d.installments - d.paidInstallments)) / (d.installments || 1);
   }, 0);
+  // sum of one installment per debt that still owes ("cuota de este mes")
+  const monthlyInstallments = debts.reduce((s, d) => {
+    if (d.paidInstallments >= d.installments) return s;
+    const tot = d.amount * rate(rates, d.currency);
+    return s + tot / (d.installments || 1);
+  }, 0);
   // fixed expenses shown here are the standalone ones (not charged to a card)
   const standaloneFixed = fixedExpenses.filter((f) => f.cardId === null);
   const fixedTotal = fixedMonthly(standaloneFixed, rates);
@@ -45,8 +51,9 @@ export function DebtsView({ debts, rates, fixedExpenses, onAddDebt, onPayDebtDel
         Préstamos y deudas de palabra que no pertenecen a ninguna tarjeta (ej: un préstamo de un familiar). No afectan el límite ni las métricas de tus tarjetas.
       </div>
 
-      <div className="mb-[26px] grid max-w-[960px] gap-4" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))" }}>
+      <div className="mb-[26px] grid max-w-[1160px] gap-4" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))" }}>
         <StatTile label="Total adeudado (ARS)" value={fmt(total)} valueColor="var(--tj-debt)" big />
+        <StatTile label="Cuotas del mes (ARS)" value={fmt(monthlyInstallments)} valueColor="var(--tj-debt)" big />
         <StatTile label="Deudas activas" value={debts.length} big />
         <StatTile label="Gastos fijos · por mes" value={fmt(fixedTotal)} valueColor="var(--tj-debt)" big />
       </div>
@@ -56,8 +63,9 @@ export function DebtsView({ debts, rates, fixedExpenses, onAddDebt, onPayDebtDel
           <AnimatePresence initial={false}>
             {debts.map((d) => {
               const tot = d.amount * rate(rates, d.currency);
+              const per = tot / (d.installments || 1);
               const rem = (tot * (d.installments - d.paidInstallments)) / d.installments;
-              const sub = (d.note ? d.note + " · " : "") + `${d.paidInstallments}/${d.installments} cuotas`;
+              const sub = (d.note ? d.note + " · " : "") + `${fmtCur(per, "ARS")}/cuota`;
               return (
                 <motion.div
                   key={d.id}

@@ -36,6 +36,8 @@ export const cards = pgTable("cards", {
   closingAnchor: date("closing_anchor", { mode: "string" }),
   closingNextGap: integer("closing_next_gap"),
   dueDays: integer("due_days"),
+  // day the card statement was last paid ("Pagar tarjeta"); clears the payment-due alert
+  lastPaymentAt: date("last_payment_at", { mode: "string" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
