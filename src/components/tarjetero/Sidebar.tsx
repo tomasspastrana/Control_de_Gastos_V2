@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import type { Card, FixedExpense, Purchase, Rates } from "@/lib/types";
 import { cardMetrics, fmt, themeColors } from "@/lib/calc";
 
-type View = "dashboard" | "card" | "debts";
+type View = "dashboard" | "card" | "debts" | "statements";
 
 const navBase: CSSProperties = {
   display: "flex",
@@ -36,13 +36,14 @@ interface Props {
   onAddPurchase: () => void;
   onGoHome: () => void;
   onGoDebts: () => void;
+  onGoStatements: () => void;
   onAddCard: () => void;
   onOpenSettings: () => void;
   onOpenCard: (id: string) => void;
   userEmail: string;
 }
 
-export function Sidebar({ cards, purchases, rates, fixedExpenses, view, selectedCardId, debtsCount, onAddPurchase, onGoHome, onGoDebts, onAddCard, onOpenSettings, onOpenCard, userEmail }: Props) {
+export function Sidebar({ cards, purchases, rates, fixedExpenses, view, selectedCardId, debtsCount, onAddPurchase, onGoHome, onGoDebts, onGoStatements, onAddCard, onOpenSettings, onOpenCard, userEmail }: Props) {
   return (
     <aside className="tj-side" style={{ display: "flex", flexDirection: "column", gap: 14, padding: "22px 18px", height: "100vh", position: "sticky", top: 0 }}>
       {/* logo */}
@@ -71,6 +72,9 @@ export function Sidebar({ cards, purchases, rates, fixedExpenses, view, selected
         {debtsCount > 0 && (
           <span style={{ marginLeft: "auto", background: "rgba(109,94,246,.14)", color: "var(--tj-accent)", fontSize: 10.5, fontWeight: 800, padding: "2px 8px", borderRadius: 20 }}>{debtsCount}</span>
         )}
+      </button>
+      <button onClick={onGoStatements} className="tj-sidebtn" style={{ ...navBase, ...(view === "statements" ? navActive : {}) }}>
+        <span style={{ width: 20, height: 20, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>🧾</span> Resúmenes
       </button>
 
       <div className="tj-sec-label" style={{ marginTop: 6, padding: "0 8px", fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", color: "#9a96b6", textTransform: "uppercase" }}>Mis tarjetas</div>

@@ -7,7 +7,7 @@ import { TjSelect } from "../TjSelect";
 import { purchaseSchema, toAmount } from "@/lib/schemas";
 import { uid } from "@/lib/id";
 import { fmt, rate } from "@/lib/calc";
-import { fmtClosing, nextClosing, parseYmd, purchaseStatement, ruleFromCard } from "@/lib/closing";
+import { fmtClosing, installmentStatement, nextClosing, parseYmd, ruleFromCard } from "@/lib/closing";
 import { CATEGORIES, CURRENCIES, type Card, type Currency, type Purchase, type Rates } from "@/lib/types";
 
 interface Props {
@@ -60,12 +60,15 @@ export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, rat
   const hasCards = cards.length > 0;
   const isEdit = !!initial;
 
-  // simulator: which statement this purchase falls into, given its date + the card's cycle
+  // simulator: which statement this purchase's next pending installment falls into
   const simCard = cards.find((c) => c.id === f.cardId);
   const simRule = simCard ? ruleFromCard(simCard) : null;
-  const sim = simRule && f.date ? purchaseStatement(simRule, parseYmd(f.date), simCard?.dueDays ?? null) : null;
-  // rolled = its statement is later than the current open one (loaded after this cycle's closing)
-  const rolled = !!(simRule && sim && sim.closing.getTime() > nextClosing(simRule).getTime());
+  const simInst = Math.max(1, parseInt(f.installments || "1", 10) || 1);
+  const simPaid = Math.min(Math.max(0, parseInt(f.paidInstallments || "0", 10) || 0), simInst - 1);
+  const sim = simRule && f.date ? installmentStatement(simRule, parseYmd(f.date), simPaid, simCard?.dueDays ?? null) : null;
+  const isFresh = simPaid === 0;
+  // rolled = a fresh purchase whose first statement is later than the current open one
+  const rolled = isFresh && !!(simRule && sim && sim.closing.getTime() > nextClosing(simRule).getTime());
 
   function submit() {
     const parsed = purchaseSchema.safeParse(f);
@@ -163,12 +166,12 @@ export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, rat
               sim ? (
                 <div className="mb-1 rounded-[12px] px-3.5 py-2.5" style={{ background: "rgba(109,94,246,.08)", border: "1px solid rgba(109,94,246,.18)" }}>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-bold" style={{ color: "var(--tj-accent)" }}>
-                    <span>🧾 Entra al resumen que cierra el {fmtClosing(sim.closing)}</span>
+                    <span>🧾 {isFresh ? "Entra al" : `Próxima cuota (#${simPaid + 1}) en el`} resumen que cierra el {fmtClosing(sim.closing)}</span>
                     {rolled && <span className="rounded-full px-2 py-0.5 text-[10px] font-extrabold" style={{ background: "rgba(232,185,78,.2)", color: "#a9791f" }}>próximo resumen</span>}
                   </div>
                   {sim.due && (
                     <div className="mt-0.5 text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
-                      La primera cuota vence el {fmtClosing(sim.due)}
+                      {isFresh ? "La primera cuota vence" : "Esa cuota vence"} el {fmtClosing(sim.due)}
                     </div>
                   )}
                 </div>

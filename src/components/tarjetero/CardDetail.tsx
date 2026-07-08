@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import type { Card, FixedExpense, Purchase, Rates } from "@/lib/types";
 import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseInstallment, rate } from "@/lib/calc";
-import { fmtClosing, parseYmd, paymentAlert, purchaseStatement, ruleFromCard } from "@/lib/closing";
+import { fmtClosing, installmentStatement, parseYmd, paymentAlert, ruleFromCard } from "@/lib/closing";
 import { updateCardClosing } from "@/app/actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CreditCardVisual } from "./CreditCardVisual";
@@ -142,7 +142,9 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
                   const tot = p.amount * rate(rates, p.currency);
                   const per = purchaseInstallment(p, rates);
                   const rem = (tot * (p.installments - p.paidInstallments)) / p.installments;
-                  const stmt = rule ? purchaseStatement(rule, parseYmd(p.date), card.dueDays ?? null) : null;
+                  const fullyPaid = p.paidInstallments >= p.installments;
+                  // statement of the next PENDING installment (not the first one)
+                  const stmt = rule ? installmentStatement(rule, parseYmd(p.date), Math.min(p.paidInstallments, p.installments - 1), card.dueDays ?? null) : null;
                   return (
                     <motion.div
                       key={p.id}
@@ -161,9 +163,15 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
                             {p.category} · {fmtDate(p.date)} · {fmtCur(per, "ARS")}/cuota
                           </div>
                           {stmt && (
-                            <div className="mt-1 inline-flex flex-wrap items-center gap-1 text-[11px] font-semibold" style={{ color: "var(--tj-accent)" }}>
-                              <span aria-hidden>🧾</span> Resumen cierra {fmtClosing(stmt.closing)}
-                              {stmt.due && <span style={{ color: "var(--tj-muted)" }}>· vence {fmtClosing(stmt.due)}</span>}
+                            <div className="mt-1 inline-flex flex-wrap items-center gap-1 text-[11px] font-semibold" style={{ color: fullyPaid ? "var(--tj-good)" : "var(--tj-accent)" }}>
+                              {fullyPaid ? (
+                                <><span aria-hidden>✓</span> Cuotas saldadas</>
+                              ) : (
+                                <>
+                                  <span aria-hidden>🧾</span> Cuota {p.paidInstallments + 1}/{p.installments} · resumen cierra {fmtClosing(stmt.closing)}
+                                  {stmt.due && <span style={{ color: "var(--tj-muted)" }}>· vence {fmtClosing(stmt.due)}</span>}
+                                </>
+                              )}
                             </div>
                           )}
                         </div>

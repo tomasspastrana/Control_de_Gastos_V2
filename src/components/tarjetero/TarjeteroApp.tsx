@@ -10,13 +10,14 @@ import { Sidebar } from "./Sidebar";
 import { Dashboard } from "./Dashboard";
 import { CardDetail } from "./CardDetail";
 import { DebtsView } from "./DebtsView";
+import { StatementsView } from "./StatementsView";
 import { NewCardModal } from "./modals/NewCardModal";
 import { NewPurchaseModal } from "./modals/NewPurchaseModal";
 import { SettingsModal } from "./modals/SettingsModal";
 import { NewDebtModal } from "./modals/NewDebtModal";
 import { FixedExpenseModal } from "./modals/FixedExpenseModal";
 
-type View = "dashboard" | "card" | "debts";
+type View = "dashboard" | "card" | "debts" | "statements";
 type Modal = null | "card" | "purchase" | "settings" | "debt" | "fixed";
 
 export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: string }) {
@@ -51,6 +52,7 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
   const openCard = (id: string) => { setSelectedCardId(id); setView("card"); };
   const goHome = () => { setView("dashboard"); setSelectedCardId(null); };
   const goDebts = () => { setView("debts"); setSelectedCardId(null); };
+  const goStatements = () => { setView("statements"); setSelectedCardId(null); };
 
   const defaultPurchaseCardId = selectedCardId ?? optimistic.cards[0]?.id ?? "";
   const nextTheme = THEMES[optimistic.cards.length % THEMES.length];
@@ -96,6 +98,7 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
             onAddPurchase={openNewPurchase}
             onGoHome={goHome}
             onGoDebts={goDebts}
+            onGoStatements={goStatements}
             onAddCard={() => setModal("card")}
             onOpenSettings={() => setModal("settings")}
             onOpenCard={openCard}
@@ -132,6 +135,16 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
             onEditFixed={openEditFixed}
             onToggleFixed={toggleFixed}
             onDeleteFixed={deleteFixed}
+          />
+        )}
+
+        {effectiveView === "statements" && (
+          <StatementsView
+            cards={optimistic.cards}
+            purchases={optimistic.purchases}
+            fixedExpenses={optimistic.fixedExpenses}
+            rates={optimistic.rates}
+            onOpenCard={openCard}
           />
         )}
 

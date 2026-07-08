@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   type ClosingRule,
+  closingInMonth,
   deriveWeekdayCycle,
   dueDate,
+  installmentStatement,
   lastClosingOnOrBefore,
   nextClosing,
   parseYmd,
@@ -80,6 +82,32 @@ describe("purchaseStatement", () => {
   });
   it("sin dueDays devuelve due null", () => {
     expect(purchaseStatement(uala, parseYmd("2026-06-10"), null).due).toBeNull();
+  });
+});
+
+describe("closingInMonth", () => {
+  const uala: ClosingRule = { type: "fixed_day", day: 30, businessAdjust: true };
+  it("devuelve el cierre del mes pedido", () => {
+    expect(ymd(closingInMonth(uala, 2026, 5)!)).toBe("2026-06-30"); // junio (month 5)
+    expect(ymd(closingInMonth(uala, 2026, 1)!)).toBe("2026-02-27"); // febrero → hábil anterior
+  });
+  const patagonia: ClosingRule = { type: "weekday_cycle", ...deriveWeekdayCycle("2026-02-26", "2026-03-26") };
+  it("weekday_cycle: mes sin cierre devuelve null", () => {
+    // ciclo salta de 28-may a 02-jul → junio no tiene cierre
+    expect(closingInMonth(patagonia, 2026, 5)).toBeNull();
+    expect(ymd(closingInMonth(patagonia, 2026, 6)!)).toBe("2026-07-02");
+  });
+});
+
+describe("installmentStatement", () => {
+  const uala: ClosingRule = { type: "fixed_day", day: 30, businessAdjust: true };
+  it("index 0 = primer resumen (igual a purchaseStatement)", () => {
+    // compra dic-2025 → primer cierre 30-dic-2025
+    expect(ymd(installmentStatement(uala, parseYmd("2025-12-10"), 0, 8).closing)).toBe("2025-12-30");
+  });
+  it("cuotas ya pagadas avanzan el resumen (dic-2025 con 6 cuotas pagadas → jun-2026)", () => {
+    // index 6 = cuota #7: dic-25, ene, feb, mar, abr, may, jun → 30-jun-2026
+    expect(ymd(installmentStatement(uala, parseYmd("2025-12-10"), 6, 8).closing)).toBe("2026-06-30");
   });
 });
 

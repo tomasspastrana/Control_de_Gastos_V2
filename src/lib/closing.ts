@@ -92,6 +92,12 @@ export function nextClosing(rule: ClosingRule, from: Date = new Date()): Date {
   return c;
 }
 
+/** The card's statement closing that falls within calendar (year, month), or null. */
+export function closingInMonth(rule: ClosingRule, year: number, month: number): Date | null {
+  const c = nextClosing(rule, new Date(year, month, 1));
+  return c.getFullYear() === year && c.getMonth() === month ? c : null;
+}
+
 /** The next `n` closing dates starting at nextClosing(from). */
 export function upcomingClosings(rule: ClosingRule, from: Date = new Date(), n = 3): Date[] {
   const out: Date[] = [];
@@ -134,6 +140,23 @@ export function purchaseStatement(
   dueDays: number | null,
 ): { closing: Date; due: Date | null } {
   const closing = nextClosing(rule, purchaseDate);
+  return { closing, due: dueDays != null ? dueDate(closing, dueDays) : null };
+}
+
+/**
+ * Statement for a purchase's (0-indexed) installment: `index` cycles after the first.
+ * Installment #1 (index 0) = first statement; installment #k = index k-1. Lets us show the
+ * statement of the *current* pending cuota instead of always the first one.
+ */
+export function installmentStatement(
+  rule: ClosingRule,
+  purchaseDate: Date,
+  index: number,
+  dueDays: number | null,
+): { closing: Date; due: Date | null } {
+  const i = Math.max(0, index);
+  const closings = upcomingClosings(rule, purchaseDate, i + 1);
+  const closing = closings[Math.min(i, closings.length - 1)];
   return { closing, due: dueDays != null ? dueDate(closing, dueDays) : null };
 }
 
