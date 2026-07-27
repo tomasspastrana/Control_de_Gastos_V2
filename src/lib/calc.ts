@@ -1,7 +1,7 @@
 // Business logic ported 1:1 from the prototype (reference/prototype.html).
 // Pure functions only — easy to unit-test and reuse on client & server.
 
-import type { Card, Currency, FixedExpense, Purchase, Rates, ThemeName } from "./types";
+import type { Card, Currency, Debt, FixedExpense, Purchase, Rates, ThemeName } from "./types";
 
 // ---------- currency & formatting ----------
 export function rate(rates: Rates, c: Currency): number {
@@ -111,6 +111,14 @@ export function fixedMonthly(fixed: FixedExpense[], rates: Rates): number {
     (s, f) => (f.active ? s + f.amount * rate(rates, f.currency) : s),
     0,
   );
+}
+
+/** Sum (ARS) of one installment per debt that still owes — this month's debt bill. */
+export function debtsMonthly(debts: Debt[], rates: Rates): number {
+  return debts.reduce((s, d) => {
+    if (d.paidInstallments >= d.installments) return s;
+    return s + (d.amount * rate(rates, d.currency)) / (d.installments || 1);
+  }, 0);
 }
 
 /** Aggregate metrics for one card, in ARS. */

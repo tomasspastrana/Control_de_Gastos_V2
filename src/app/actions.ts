@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { cards, debts, fixedExpenses, profiles, purchases } from "@/db/schema";
+import { cards, debts, fixedExpenses, profiles, purchases, statementSnapshots } from "@/db/schema";
 import { createClient } from "@/lib/supabase/server";
-import { cardSchema, closingConfigSchema, debtSchema, fixedExpenseSchema, purchaseSchema, ratesSchema } from "@/lib/schemas";
+import { getAppData } from "@/lib/data";
+import { buildMonthSnapshots } from "@/lib/statements";
+import { cardSchema, closeMonthSchema, closingConfigSchema, debtSchema, fixedExpenseSchema, purchaseSchema, ratesSchema } from "@/lib/schemas";
 
 async function requireUserId(): Promise<string> {
   const supabase = await createClient();
@@ -141,6 +143,40 @@ export async function payCard(cardId: string, ids: string[]) {
     .update(cards)
     .set({ lastPaymentAt: new Date().toISOString().slice(0, 10) })
     .where(and(eq(cards.id, cardId), eq(cards.userId, userId)));
+  done();
+}
+
+// ---------- statement history ("Cerrar mes") ----------
+/** Freeze a calendar month's per-card statements into history (upsert per card+period). */
+export async function closeMonth(input: unknown) {
+  const userId = await requireUserId();
+  const { year, month } = closeMonthSchema.parse(input);
+  const data = await getAppData(userId);
+  const rows = buildMonthSnapshots(
+    data.cards,
+    data.purchases,
+    data.fixedExpenses,
+    data.rates,
+    year,
+    month,
+    new Date(),
+  ).map((r) => ({ ...r, userId }));
+
+  if (rows.length > 0) {
+    await db
+      .insert(statementSnapshots)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: [statementSnapshots.userId, statementSnapshots.cardId, statementSnapshots.period],
+        set: {
+          nickname: sql`excluded.nickname`,
+          closingDate: sql`excluded.closing_date`,
+          dueDate: sql`excluded.due_date`,
+          total: sql`excluded.total`,
+          items: sql`excluded.items`,
+        },
+      });
+  }
   done();
 }
 

@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import type { Card, FixedExpense, Purchase, Rates } from "@/lib/types";
 import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseInstallment, rate } from "@/lib/calc";
-import { dueDate, fmtClosing, nextClosing, paymentAlert, ruleFromCard } from "@/lib/closing";
+import { currentDueClosing, dueDate, fmtClosing, paymentAlert, ruleFromCard } from "@/lib/closing";
 import { currentStatement } from "@/lib/statements";
 import { updateCardClosing } from "@/app/actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -41,8 +41,8 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
 
   const rule = ruleFromCard(card);
   const alert = rule ? paymentAlert(rule, card.dueDays ?? null, m.debt > 0.5, card.lastPaymentAt ?? null) : null;
-  // the current statement (next closing from today) — where each purchase's next cuota lands
-  const curClosing = rule ? nextClosing(rule) : null;
+  // the statement due now (the resumen awaiting payment) — where each purchase's next cuota lands
+  const curClosing = rule ? currentDueClosing(rule, new Date(), card.lastPaymentAt ?? null) : null;
   const curDue = curClosing && card.dueDays != null ? dueDate(curClosing, card.dueDays) : null;
   // "Pagar tarjeta" = this month's statement (matches the Resúmenes total exactly)
   const stmt = currentStatement(card, purchases, fixedExpenses, rates);

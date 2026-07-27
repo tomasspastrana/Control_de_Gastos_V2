@@ -64,12 +64,33 @@ export interface FixedExpense {
   occupiesLimit: boolean;
 }
 
+/** One line of a saved statement (mirrors a StatementItem, without the runtime purchaseId). */
+export interface StatementSnapshotItem {
+  label: string;
+  sub: string;
+  amount: number; // ARS
+  kind: "purchase" | "fixed";
+}
+
+/** A card's statement frozen in history when a month is closed ("Cerrar mes"). */
+export interface StatementSnapshot {
+  id: string;
+  cardId: string;
+  period: string; // yyyy-mm-01 — first day of the closed month
+  nickname: string; // card name at close time (survives if the card is later renamed)
+  closingDate: string | null; // yyyy-mm-dd
+  dueDate: string | null; // yyyy-mm-dd
+  total: number; // ARS
+  items: StatementSnapshotItem[];
+}
+
 export interface AppData {
   rates: Rates;
   cards: Card[];
   purchases: Purchase[];
   debts: Debt[];
   fixedExpenses: FixedExpense[];
+  snapshots: StatementSnapshot[];
 }
 
 export const THEMES: ThemeName[] = [

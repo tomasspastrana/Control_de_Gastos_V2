@@ -110,19 +110,37 @@ export function closingInMonth(rule: ClosingRule, year: number, month: number): 
 }
 
 /**
- * Walking the closings FORWARD from `from` (offset 0 = the next closing), find the one that
+ * The statement currently "due" — the anchor for installment scheduling (offset 0).
+ * It's the most recent closing on/before `from` when that statement is still unpaid
+ * (so a resumen that already closed earlier this month is NOT skipped); otherwise the
+ * next upcoming closing. Mirrors `paymentAlert`'s "already paid" check
+ * (`lastPaymentAt >= closing` ⇒ settled) so the two stay consistent.
+ */
+export function currentDueClosing(
+  rule: ClosingRule,
+  from: Date = new Date(),
+  lastPaymentAt: string | null = null,
+): Date {
+  const last = lastClosingOnOrBefore(rule, from);
+  if (last && !(lastPaymentAt && parseYmd(lastPaymentAt) >= last)) return last;
+  return nextClosing(rule, from);
+}
+
+/**
+ * Walking the closings FORWARD from `start` (offset 0 = `start`), find the one that
  * falls in calendar (year, month) and return it with its offset. Null when that month has no
- * closing ahead (past months, or months the cycle skips). Used to anchor installment
- * scheduling to "now" rather than to the purchase date.
+ * closing ahead (past months, or months the cycle skips). `start` defaults to the next closing
+ * on/after `from`; pass `currentDueClosing(...)` to anchor on the resumen actually due now.
  */
 export function forwardClosingInMonth(
   rule: ClosingRule,
   year: number,
   month: number,
   from: Date = new Date(),
+  start?: Date,
 ): { closing: Date; offset: number } | null {
   const target = year * 12 + month;
-  let c = nextClosing(rule, from);
+  let c = start ?? nextClosing(rule, from);
   for (let offset = 0; offset < 60; offset++) {
     const cm = c.getFullYear() * 12 + c.getMonth();
     if (cm === target) return { closing: c, offset };

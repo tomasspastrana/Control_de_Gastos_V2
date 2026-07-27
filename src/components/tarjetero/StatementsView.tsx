@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
-import type { Card, FixedExpense, Purchase, Rates } from "@/lib/types";
+import { toast } from "sonner";
+import type { Card, FixedExpense, Purchase, Rates, StatementSnapshot } from "@/lib/types";
 import { fmt } from "@/lib/calc";
-import { fmtClosing, ruleFromCard } from "@/lib/closing";
-import { cardStatement, generalStatement } from "@/lib/statements";
+import { fmtClosing, parseYmd, ruleFromCard } from "@/lib/closing";
+import { cardStatement, generalStatement, periodKey } from "@/lib/statements";
 import { StatTile } from "./StatTile";
 
 interface Props {
@@ -13,7 +14,9 @@ interface Props {
   purchases: Purchase[];
   fixedExpenses: FixedExpense[];
   rates: Rates;
+  snapshots: StatementSnapshot[];
   onOpenCard: (id: string) => void;
+  onCloseMonth: (year: number, month: number) => void;
 }
 
 const monthLabel = (y: number, m: number) => {
@@ -21,7 +24,7 @@ const monthLabel = (y: number, m: number) => {
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 
-export function StatementsView({ cards, purchases, fixedExpenses, rates, onOpenCard }: Props) {
+export function StatementsView({ cards, purchases, fixedExpenses, rates, snapshots, onOpenCard, onCloseMonth }: Props) {
   const today = new Date();
   const [anchor, setAnchor] = useState({ y: today.getFullYear(), m: today.getMonth() });
   const isCurrent = anchor.y === today.getFullYear() && anchor.m === today.getMonth();
@@ -54,6 +57,27 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, onOpenC
     [cards, purchases, fixedExpenses, rates, anchor],
   );
 
+  // saved (closed) statements for this month — the frozen historical record
+  const periodStr = periodKey(anchor.y, anchor.m);
+  const monthSnaps = useMemo(
+    () => snapshots.filter((s) => s.period === periodStr).sort((a, b) => b.total - a.total),
+    [snapshots, periodStr],
+  );
+  const isClosed = monthSnaps.length > 0;
+  const anchorIdx = anchor.y * 12 + anchor.m;
+  const canClose = anchorIdx <= today.getFullYear() * 12 + today.getMonth();
+
+  // unified "Resumen general" rows: from snapshots when the month is closed, else live
+  const generalTotal = isClosed ? monthSnaps.reduce((s, m) => s + m.total, 0) : general.total;
+  const generalRows = isClosed
+    ? monthSnaps.map((s) => ({ key: s.cardId, nickname: s.nickname, dueLabel: s.dueDate ? fmtClosing(parseYmd(s.dueDate)) : null, total: s.total }))
+    : general.perCard.map((c) => ({ key: c.cardId, nickname: c.nickname, dueLabel: c.due ? fmtClosing(c.due) : null, total: c.total }));
+
+  const handleClose = () => {
+    onCloseMonth(anchor.y, anchor.m);
+    toast.success(`Resumen de ${monthLabel(anchor.y, anchor.m)} guardado`);
+  };
+
   const navBtn = (label: string, onClick: () => void) => (
     <button onClick={onClick} className="cursor-pointer rounded-[11px] px-3 py-2 text-[13px] font-bold" style={{ border: "1px solid rgba(120,110,180,.22)", background: "rgba(255,255,255,.6)", color: "var(--tj-debt)" }}>
       {label}
@@ -68,26 +92,41 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, onOpenC
       {/* month navigator */}
       <div className="mb-5 flex flex-wrap items-center gap-2.5">
         {navBtn("← Mes anterior", () => move(-1))}
-        <div className="min-w-[150px] text-center text-[16px] font-extrabold tracking-tight">{monthLabel(anchor.y, anchor.m)}</div>
+        <div className="flex min-w-[150px] flex-col items-center">
+          <span className="text-[16px] font-extrabold tracking-tight">{monthLabel(anchor.y, anchor.m)}</span>
+          {isClosed && <span className="text-[10.5px] font-bold" style={{ color: "var(--tj-good)" }}>✓ mes cerrado</span>}
+        </div>
         {navBtn("Mes siguiente →", () => move(1))}
         {!isCurrent && navBtn("Hoy", () => setAnchor({ y: today.getFullYear(), m: today.getMonth() }))}
+        {canClose && (
+          <button
+            onClick={handleClose}
+            className="ml-auto cursor-pointer rounded-[11px] px-3.5 py-2 text-[13px] font-bold text-white"
+            style={{ border: "none", background: isClosed ? "rgba(109,94,246,.85)" : "#1c1c22", boxShadow: "0 8px 18px rgba(28,28,34,.22)" }}
+            title="Guarda el resumen de este mes en el historial"
+          >
+            {isClosed ? "Actualizar cierre" : "✓ Cerrar mes"}
+          </button>
+        )}
       </div>
 
       {/* GENERAL */}
       <h2 className="mb-3 text-[17px] font-extrabold tracking-tight">Resumen general</h2>
-      {general.perCard.length > 0 ? (
+      {generalRows.length > 0 ? (
         <div className="tj-glass mb-4 max-w-[720px]" style={{ padding: "20px 22px", borderRadius: 22 }}>
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <div className="text-[12px] font-semibold" style={{ color: "var(--tj-muted)" }}>Total a pagar · {monthLabel(anchor.y, anchor.m)}</div>
-              <div className="text-[26px] font-extrabold tracking-tight" style={{ color: "var(--tj-debt)", fontVariantNumeric: "tabular-nums" }}>{fmt(general.total)}</div>
+              <div className="text-[12px] font-semibold" style={{ color: "var(--tj-muted)" }}>
+                {isClosed ? "Total pagado" : "Total a pagar"} · {monthLabel(anchor.y, anchor.m)}
+              </div>
+              <div className="text-[26px] font-extrabold tracking-tight" style={{ color: "var(--tj-debt)", fontVariantNumeric: "tabular-nums" }}>{fmt(generalTotal)}</div>
             </div>
           </div>
           <div className="flex flex-col gap-1">
-            {general.perCard.map((c) => (
-              <div key={c.cardId} className="tj-row flex items-center gap-3 py-2" style={{ borderTop: "1px solid rgba(120,110,180,.12)" }}>
+            {generalRows.map((c) => (
+              <div key={c.key} className="tj-row flex items-center gap-3 py-2" style={{ borderTop: "1px solid rgba(120,110,180,.12)" }}>
                 <span className="min-w-0 flex-1 text-[13.5px] font-bold" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.nickname}</span>
-                {c.due && <span className="text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>vence {fmtClosing(c.due)}</span>}
+                {c.dueLabel && <span className="text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>vence {c.dueLabel}</span>}
                 <span className="text-[14px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(c.total)}</span>
               </div>
             ))}
@@ -95,7 +134,9 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, onOpenC
         </div>
       ) : (
         <div className="mb-4 max-w-[720px] rounded-[20px] px-5 py-10 text-center text-sm font-semibold" style={{ background: "rgba(255,255,255,.5)", border: "1px dashed rgba(109,94,246,.3)", color: "#9a96b6" }}>
-          Nada a pagar en {monthLabel(anchor.y, anchor.m)}.
+          {canClose
+            ? `Nada a pagar en ${monthLabel(anchor.y, anchor.m)}.`
+            : `Sin resumen guardado de ${monthLabel(anchor.y, anchor.m)}.`}
         </div>
       )}
 
@@ -106,9 +147,45 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, onOpenC
         ))}
       </div>
 
-      {/* PER CARD — every card is shown, with an empty state when nothing is due */}
+      {/* PER CARD */}
       <h2 className="mb-3 text-[17px] font-extrabold tracking-tight">Por tarjeta</h2>
-      {cards.length > 0 ? (
+      {isClosed ? (
+        // frozen historical record for a closed month
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))" }}>
+          {monthSnaps.map((s) => (
+            <div key={s.cardId} className="tj-glass-soft" style={{ padding: 20, borderRadius: 22 }}>
+              <button onClick={() => onOpenCard(s.cardId)} className="mb-3 flex w-full cursor-pointer items-start justify-between gap-3 border-none bg-transparent p-0 text-left">
+                <div className="min-w-0">
+                  <div className="text-[15.5px] font-extrabold tracking-tight">{s.nickname}</div>
+                  <div className="mt-px text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
+                    {s.closingDate ? <>cerró {fmtClosing(parseYmd(s.closingDate))}</> : "resumen guardado"}
+                    {s.dueDate && <> · venció {fmtClosing(parseYmd(s.dueDate))}</>}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-base font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-debt)" }}>{fmt(s.total)}</div>
+                  <div className="text-[10.5px] font-semibold" style={{ color: "var(--tj-good)" }}>pagado</div>
+                </div>
+              </button>
+              {s.items.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  {s.items.map((it, i) => (
+                    <div key={i} className="flex items-center gap-2.5 py-1.5" style={{ borderTop: "1px solid rgba(120,110,180,.1)" }}>
+                      <span style={{ width: 9, height: 9, borderRadius: 3, flex: "none", background: it.kind === "fixed" ? "var(--tj-muted-2)" : "var(--tj-accent)" }} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[13px] font-bold" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</div>
+                        <div className="text-[11px] font-semibold" style={{ color: "var(--tj-muted)" }}>{it.sub}</div>
+                      </div>
+                      <span className="text-[13px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-ink)" }}>{fmt(it.amount)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : cards.length > 0 ? (
+        // live view — every card is shown, with an empty state when nothing is due
         <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))" }}>
           {perCardAll.map(({ card, stmt }) => {
             const hasRule = !!ruleFromCard(card);

@@ -2,7 +2,8 @@
 // user_id references Supabase's auth.users(id); that FK + RLS live in supabase/rls.sql
 // (Drizzle does not manage the `auth` schema).
 
-import { boolean, integer, numeric, pgEnum, pgTable, text, timestamp, uuid, date } from "drizzle-orm/pg-core";
+import { boolean, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, date } from "drizzle-orm/pg-core";
+import type { StatementSnapshotItem } from "../lib/types";
 
 export const currencyEnum = pgEnum("currency", ["ARS", "USD", "EUR"]);
 export const brandEnum = pgEnum("card_brand", ["visa", "mastercard"]);
@@ -85,8 +86,30 @@ export const fixedExpenses = pgTable("fixed_expenses", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Statements frozen in history when the user closes a month ("Cerrar mes").
+// One row per (card, month). nickname/items are denormalized so history survives edits.
+export const statementSnapshots = pgTable(
+  "statement_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    cardId: uuid("card_id")
+      .notNull()
+      .references(() => cards.id, { onDelete: "cascade" }),
+    period: date("period", { mode: "string" }).notNull(), // yyyy-mm-01 (closed month)
+    nickname: text("nickname").notNull(),
+    closingDate: date("closing_date", { mode: "string" }),
+    dueDate: date("due_date", { mode: "string" }),
+    total: numeric("total", { precision: 14, scale: 2, mode: "number" }).notNull(),
+    items: jsonb("items").$type<StatementSnapshotItem[]>().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("statement_snapshots_user_card_period_uq").on(t.userId, t.cardId, t.period)],
+);
+
 export type ProfileRow = typeof profiles.$inferSelect;
 export type CardRow = typeof cards.$inferSelect;
 export type PurchaseRow = typeof purchases.$inferSelect;
 export type DebtRow = typeof debts.$inferSelect;
 export type FixedExpenseRow = typeof fixedExpenses.$inferSelect;
+export type StatementSnapshotRow = typeof statementSnapshots.$inferSelect;

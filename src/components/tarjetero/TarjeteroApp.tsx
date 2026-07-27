@@ -4,6 +4,7 @@ import { useOptimistic, useState, useTransition } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { reducer, type Action } from "@/lib/store";
 import { THEMES, type AppData, type Card, type Debt, type FixedExpense, type Purchase, type Rates } from "@/lib/types";
+import { buildMonthSnapshots } from "@/lib/statements";
 import * as actions from "@/app/actions";
 import { AppShell } from "./AppShell";
 import { Sidebar } from "./Sidebar";
@@ -71,6 +72,12 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
   const openEditPurchase = (p: Purchase) => { setPurchaseEdit(p); setModal("purchase"); };
   const payDelta = (id: string, delta: number) => run({ type: "PAY_DELTA", id, delta }, () => actions.payPurchaseDelta(id, delta));
   const payCard = (cardId: string, ids: string[]) => run({ type: "PAY_CARD", cardId, at: new Date().toLocaleDateString("en-CA"), ids }, () => actions.payCard(cardId, ids));
+  const closeMonth = (year: number, month: number) => {
+    const snaps = buildMonthSnapshots(optimistic.cards, optimistic.purchases, optimistic.fixedExpenses, optimistic.rates, year, month).map(
+      (s) => ({ ...s, id: `tmp-${s.cardId}-${s.period}` }),
+    );
+    run({ type: "CLOSE_MONTH", snapshots: snaps }, () => actions.closeMonth({ year, month }));
+  };
   const createDebt = (d: Debt) => run({ type: "ADD_DEBT", debt: d }, () => actions.createDebt(d));
   const deleteDebt = (id: string) => run({ type: "DELETE_DEBT", id }, () => actions.deleteDebt(id));
   const payDebtDelta = (id: string, delta: number) => run({ type: "PAY_DEBT_DELTA", id, delta }, () => actions.payDebtDelta(id, delta));
@@ -144,7 +151,9 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
             purchases={optimistic.purchases}
             fixedExpenses={optimistic.fixedExpenses}
             rates={optimistic.rates}
+            snapshots={optimistic.snapshots}
             onOpenCard={openCard}
+            onCloseMonth={closeMonth}
           />
         )}
 

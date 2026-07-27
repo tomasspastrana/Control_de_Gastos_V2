@@ -1,7 +1,7 @@
 // Pure reducer for the Tarjetero domain data.
 // Kept side-effect-free so it's easy to unit-test and, in Fase 5, mirror on the server.
 
-import type { AppData, Card, Debt, FixedExpense, Purchase, Rates } from "./types";
+import type { AppData, Card, Debt, FixedExpense, Purchase, Rates, StatementSnapshot } from "./types";
 
 export type Action =
   | { type: "HYDRATE"; data: AppData }
@@ -19,6 +19,7 @@ export type Action =
   | { type: "EDIT_FIXED"; id: string; patch: Partial<FixedExpense> }
   | { type: "DELETE_FIXED"; id: string }
   | { type: "TOGGLE_FIXED"; id: string }
+  | { type: "CLOSE_MONTH"; snapshots: StatementSnapshot[] }
   | { type: "SET_RATES"; rates: Partial<Rates> };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -118,6 +119,13 @@ export function reducer(state: AppData, action: Action): AppData {
           f.id === action.id ? { ...f, active: !f.active } : f,
         ),
       };
+
+    case "CLOSE_MONTH": {
+      // replace any existing snapshots for the same card+period, then add the fresh ones
+      const keys = new Set(action.snapshots.map((s) => `${s.cardId}|${s.period}`));
+      const kept = state.snapshots.filter((s) => !keys.has(`${s.cardId}|${s.period}`));
+      return { ...state, snapshots: [...kept, ...action.snapshots] };
+    }
 
     case "SET_RATES":
       return { ...state, rates: { ...state.rates, ...action.rates } };

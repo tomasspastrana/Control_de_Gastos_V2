@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import type { Debt, FixedExpense, Rates } from "@/lib/types";
-import { catColor, fixedMonthly, fmt, fmtCur, hexA, rate } from "@/lib/calc";
+import { catColor, debtsMonthly, fixedMonthly, fmt, fmtCur, hexA, rate } from "@/lib/calc";
 import { StatTile } from "./StatTile";
 import { ProgressBar } from "./ProgressBar";
 import { InstallmentDots } from "./InstallmentDots";
@@ -27,11 +27,7 @@ export function DebtsView({ debts, rates, fixedExpenses, onAddDebt, onPayDebtDel
     return s + (tot * (d.installments - d.paidInstallments)) / (d.installments || 1);
   }, 0);
   // sum of one installment per debt that still owes ("cuota de este mes")
-  const monthlyInstallments = debts.reduce((s, d) => {
-    if (d.paidInstallments >= d.installments) return s;
-    const tot = d.amount * rate(rates, d.currency);
-    return s + tot / (d.installments || 1);
-  }, 0);
+  const monthlyInstallments = debtsMonthly(debts, rates);
   // fixed expenses shown here are the standalone ones (not charged to a card)
   const standaloneFixed = fixedExpenses.filter((f) => f.cardId === null);
   const fixedTotal = fixedMonthly(standaloneFixed, rates);

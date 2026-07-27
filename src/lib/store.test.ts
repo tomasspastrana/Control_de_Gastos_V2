@@ -8,6 +8,7 @@ const base = (): AppData => ({
   purchases: [{ id: "p1", cardId: "c1", merchant: "m", amount: 10, currency: "ARS", installments: 6, paidInstallments: 2, category: "Otros", date: "2026-01-01" }],
   debts: [{ id: "d1", creditor: "j", note: "", amount: 100, currency: "ARS", installments: 4, paidInstallments: 1 }],
   fixedExpenses: [],
+  snapshots: [],
 });
 
 describe("reducer", () => {

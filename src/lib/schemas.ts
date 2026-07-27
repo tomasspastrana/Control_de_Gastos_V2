@@ -111,3 +111,10 @@ export const ratesSchema = z.object({
   usd: z.preprocess(normalizeAmount, z.coerce.number().min(0)),
   eur: z.preprocess(normalizeAmount, z.coerce.number().min(0)),
 });
+
+/** "Cerrar mes": which calendar month to freeze into history (month is 0-based). */
+export const closeMonthSchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100),
+  month: z.coerce.number().int().min(0).max(11),
+});
+export type CloseMonthInput = z.input<typeof closeMonthSchema>;

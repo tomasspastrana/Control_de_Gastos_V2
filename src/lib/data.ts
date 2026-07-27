@@ -3,9 +3,9 @@
 
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { cards as cardsT, debts as debtsT, fixedExpenses as fixedT, profiles as profilesT, purchases as purchasesT } from "@/db/schema";
-import type { AppData, Card, Debt, FixedExpense, Purchase } from "@/lib/types";
-import type { CardRow, DebtRow, FixedExpenseRow, PurchaseRow } from "@/db/schema";
+import { cards as cardsT, debts as debtsT, fixedExpenses as fixedT, profiles as profilesT, purchases as purchasesT, statementSnapshots as snapshotsT } from "@/db/schema";
+import type { AppData, Card, Debt, FixedExpense, Purchase, StatementSnapshot } from "@/lib/types";
+import type { CardRow, DebtRow, FixedExpenseRow, PurchaseRow, StatementSnapshotRow } from "@/db/schema";
 
 function toCard(r: CardRow): Card {
   return {
@@ -68,15 +68,29 @@ function toFixedExpense(r: FixedExpenseRow): FixedExpense {
   };
 }
 
+function toSnapshot(r: StatementSnapshotRow): StatementSnapshot {
+  return {
+    id: r.id,
+    cardId: r.cardId,
+    period: r.period,
+    nickname: r.nickname,
+    closingDate: r.closingDate,
+    dueDate: r.dueDate,
+    total: r.total,
+    items: r.items ?? [],
+  };
+}
+
 /** Loads everything the dashboard needs for one user, isolated by user_id. */
 export async function getAppData(userId: string): Promise<AppData> {
   const [profile] = await db.select().from(profilesT).where(eq(profilesT.id, userId));
 
-  const [cardRows, purchaseRows, debtRows, fixedRows] = await Promise.all([
+  const [cardRows, purchaseRows, debtRows, fixedRows, snapshotRows] = await Promise.all([
     db.select().from(cardsT).where(eq(cardsT.userId, userId)).orderBy(asc(cardsT.createdAt)),
     db.select().from(purchasesT).where(eq(purchasesT.userId, userId)).orderBy(asc(purchasesT.createdAt)),
     db.select().from(debtsT).where(eq(debtsT.userId, userId)).orderBy(asc(debtsT.createdAt)),
     db.select().from(fixedT).where(eq(fixedT.userId, userId)).orderBy(asc(fixedT.createdAt)),
+    db.select().from(snapshotsT).where(eq(snapshotsT.userId, userId)).orderBy(asc(snapshotsT.period)),
   ]);
 
   return {
@@ -85,6 +99,7 @@ export async function getAppData(userId: string): Promise<AppData> {
     purchases: purchaseRows.map(toPurchase),
     debts: debtRows.map(toDebt),
     fixedExpenses: fixedRows.map(toFixedExpense),
+    snapshots: snapshotRows.map(toSnapshot),
   };
 }
 

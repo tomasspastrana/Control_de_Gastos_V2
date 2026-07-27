@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   type ClosingRule,
   closingInMonth,
+  currentDueClosing,
   forwardClosingInMonth,
   deriveWeekdayCycle,
   dueDate,
@@ -125,11 +126,32 @@ describe("forwardClosingInMonth (ancla a 'ahora')", () => {
   it("mes pasado → null", () => {
     expect(forwardClosingInMonth(uala, 2026, 5, hoy)).toBeNull(); // junio
   });
+  it("con start explícito ancla el offset 0 en ese cierre (aunque sea pasado)", () => {
+    const start = parseYmd("2026-06-30"); // resumen que vence ahora
+    expect(forwardClosingInMonth(uala, 2026, 5, hoy, start)?.offset).toBe(0); // junio
+    expect(forwardClosingInMonth(uala, 2026, 6, hoy, start)?.offset).toBe(1); // julio
+    expect(forwardClosingInMonth(uala, 2026, 3, hoy, start)).toBeNull(); // abril: antes del start
+  });
   const patagonia: ClosingRule = { type: "weekday_cycle", ...deriveWeekdayCycle("2026-05-28", "2026-07-02") };
   it("weekday_cycle: mes que el ciclo saltea → null", () => {
     // 02-jul ya pasó; próximo 30-jul (offset 0 en julio); luego salta a septiembre → agosto null
     expect(forwardClosingInMonth(patagonia, 2026, 6, hoy)?.offset).toBe(0); // julio 30
     expect(forwardClosingInMonth(patagonia, 2026, 7, hoy)).toBeNull(); // agosto: no cierra
+  });
+});
+
+describe("currentDueClosing", () => {
+  const uala: ClosingRule = { type: "fixed_day", day: 30, businessAdjust: true };
+  it("resumen ya cerrado y sin pagar → ese cierre (no salta al próximo)", () => {
+    // hoy 08-jul: el 30-jun cerró y no se pagó → resumen que vence ahora
+    expect(ymd(currentDueClosing(uala, parseYmd("2026-07-08"), null))).toBe("2026-06-30");
+  });
+  it("resumen pagado (pago on/after el cierre) → próximo cierre", () => {
+    expect(ymd(currentDueClosing(uala, parseYmd("2026-07-08"), "2026-07-05"))).toBe("2026-07-30");
+  });
+  it("cierre ya ocurrido antes de hoy dentro del mes en curso y sin pagar → ese cierre (bug BBVA)", () => {
+    const bbva: ClosingRule = { type: "fixed_day", day: 23, businessAdjust: false };
+    expect(ymd(currentDueClosing(bbva, parseYmd("2026-07-27"), null))).toBe("2026-07-23");
   });
 });
 

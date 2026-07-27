@@ -3,9 +3,9 @@
 // The next unpaid installment lands in the CURRENT statement (offset 0 = next closing), and
 // the following ones in the next closings. Recurring fixed expenses appear every statement.
 
-import type { Card, FixedExpense, Purchase, Rates } from "./types";
-import { purchaseInstallment, rate } from "./calc";
-import { dueDate, forwardClosingInMonth, nextClosing, ruleFromCard } from "./closing";
+import type { Card, Debt, FixedExpense, Purchase, Rates, StatementSnapshot } from "./types";
+import { debtsMonthly, fixedMonthly, purchaseInstallment, rate } from "./calc";
+import { currentDueClosing, dueDate, forwardClosingInMonth, ruleFromCard, ymd } from "./closing";
 
 export interface StatementItem {
   label: string;
@@ -51,7 +51,9 @@ export function cardStatement(
   const base = { cardId: card.id, nickname: card.nickname };
   if (!rule) return { ...base, closing: null, due: null, items: [], total: 0 };
 
-  const found = forwardClosingInMonth(rule, year, month, from);
+  // anchor offset 0 on the resumen actually due now (may have closed earlier this month)
+  const start = currentDueClosing(rule, from, card.lastPaymentAt ?? null);
+  const found = forwardClosingInMonth(rule, year, month, from, start);
   if (!found) return { ...base, closing: null, due: null, items: [], total: 0 };
   const { closing, offset } = found;
 
@@ -95,7 +97,7 @@ export function currentStatement(
   from: Date = new Date(),
 ): CardStatement {
   const rule = ruleFromCard(card);
-  const closing = rule ? nextClosing(rule, from) : null;
+  const closing = rule ? currentDueClosing(rule, from, card.lastPaymentAt ?? null) : null;
 
   const items: StatementItem[] = [];
   for (const p of purchases) {
@@ -137,4 +139,70 @@ export function generalStatement(
     .filter((s) => s.items.length > 0);
   const total = perCard.reduce((s, c) => s + c.total, 0);
   return { total, perCard };
+}
+
+export interface AmountDue {
+  cards: number; // sum of every card's current statement (cuota + fixed charged to the card)
+  debts: number; // one installment per unpaid personal debt
+  fixed: number; // standalone fixed expenses (not charged to any card)
+  total: number;
+}
+
+/**
+ * "A pagar este mes": what's actually due now across everything —
+ * each card's current statement (never dropped just because it already closed this month) +
+ * personal debts' monthly installment + standalone fixed expenses. Card-linked fixed expenses
+ * are already inside each card's statement, so only standalone ones are added here.
+ */
+export function amountDueThisMonth(
+  cards: Card[],
+  purchases: Purchase[],
+  fixed: FixedExpense[],
+  debts: Debt[],
+  rates: Rates,
+  from: Date = new Date(),
+): AmountDue {
+  const cardsTotal = cards.reduce(
+    (s, c) => s + currentStatement(c, purchases, fixed, rates, from).total,
+    0,
+  );
+  const debtsTotal = debtsMonthly(debts, rates);
+  const standaloneFixed = fixed.filter((f) => f.cardId === null && f.active);
+  const fixedTotal = fixedMonthly(standaloneFixed, rates);
+  return { cards: cardsTotal, debts: debtsTotal, fixed: fixedTotal, total: cardsTotal + debtsTotal + fixedTotal };
+}
+
+/** yyyy-mm-01 label for a 0-based (year, month) — the period key of a snapshot. */
+export function periodKey(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, "0")}-01`;
+}
+
+/**
+ * Freeze a calendar month into per-card snapshots (what "Cerrar mes" saves). Uses the exact
+ * same `cardStatement` the Resúmenes tab shows for that month, so history matches the view.
+ * Returns the persistable rows without id/userId (the server fills those; the client uses a
+ * temp id for the optimistic update).
+ */
+export function buildMonthSnapshots(
+  cards: Card[],
+  purchases: Purchase[],
+  fixed: FixedExpense[],
+  rates: Rates,
+  year: number,
+  month: number,
+  from: Date = new Date(),
+): Omit<StatementSnapshot, "id">[] {
+  const period = periodKey(year, month);
+  return cards
+    .map((c) => ({ c, s: cardStatement(c, purchases, fixed, rates, year, month, from) }))
+    .filter(({ s }) => s.items.length > 0)
+    .map(({ c, s }) => ({
+      cardId: c.id,
+      period,
+      nickname: c.nickname,
+      closingDate: s.closing ? ymd(s.closing) : null,
+      dueDate: s.due ? ymd(s.due) : null,
+      total: s.total,
+      items: s.items.map((i) => ({ label: i.label, sub: i.sub, amount: i.amount, kind: i.kind })),
+    }));
 }
