@@ -39,11 +39,11 @@ describe("fixed_day (Sucrédito: día 23 sin ajuste)", () => {
   });
 });
 
-describe("weekday_cycle (BBVA Francés)", () => {
+describe("weekday_cycle (BBVA Francés) — un cierre por mes", () => {
   const rule: ClosingRule = { type: "weekday_cycle", ...deriveWeekdayCycle("2026-04-23", "2026-05-21") };
-  it("predice 21-may → 25-jun → 23-jul, todos jueves", () => {
+  it("predice 21-may → 18-jun → 16-jul (3er jueves), todos jueves", () => {
     const cs = upcomingClosings(rule, parseYmd("2026-05-01"), 3).map(ymd);
-    expect(cs).toEqual(["2026-05-21", "2026-06-25", "2026-07-23"]);
+    expect(cs).toEqual(["2026-05-21", "2026-06-18", "2026-07-16"]);
     upcomingClosings(rule, parseYmd("2026-05-01"), 3).forEach((d) => expect(isThursday(d)).toBe(true));
   });
 });
@@ -53,20 +53,30 @@ describe("weekday_cycle antes del ancla (camina hacia atrás)", () => {
   it("nextClosing con fecha anterior al ancla no se queda en el ancla", () => {
     expect(ymd(nextClosing(rule, parseYmd("2026-01-01")))).toBe("2026-01-15");
   });
-  it("una compra vieja reparte las cuotas mes a mes (no se amontonan en el ancla)", () => {
+  it("una compra vieja reparte las cuotas mes a mes (una por mes, sin amontonar)", () => {
     const cs = upcomingClosings(rule, parseYmd("2025-12-24"), 6).map(ymd);
-    expect(cs).toEqual(["2026-01-15", "2026-02-19", "2026-03-19", "2026-04-23", "2026-05-21", "2026-06-25"]);
+    expect(cs).toEqual(["2026-01-15", "2026-02-19", "2026-03-19", "2026-04-16", "2026-05-21", "2026-06-18"]);
   });
 });
 
-describe("weekday_cycle (Banco Patagonia)", () => {
+describe("weekday_cycle (Banco Patagonia) — cierra todos los meses", () => {
   const rule: ClosingRule = { type: "weekday_cycle", ...deriveWeekdayCycle("2026-02-26", "2026-03-26") };
-  it("predice 26-mar → 30-abr → 28-may", () => {
+  it("predice 26-mar → 23-abr → 28-may (4º jueves)", () => {
     const cs = upcomingClosings(rule, parseYmd("2026-03-01"), 3).map(ymd);
-    expect(cs).toEqual(["2026-03-26", "2026-04-30", "2026-05-28"]);
+    expect(cs).toEqual(["2026-03-26", "2026-04-23", "2026-05-28"]);
   });
-  it("desde junio salta a 02-jul (ciclo +35)", () => {
-    expect(ymd(nextClosing(rule, parseYmd("2026-06-01")))).toBe("2026-07-02");
+  it("junio también cierra (25-jun), no se saltea ningún mes", () => {
+    expect(ymd(nextClosing(rule, parseYmd("2026-06-01")))).toBe("2026-06-25");
+  });
+});
+
+describe("weekday_cycle mensual: clamp al último jueves en meses cortos", () => {
+  // ancla 30-jul-2026 = 5º (último) jueves de julio
+  const rule: ClosingRule = { type: "weekday_cycle", ...deriveWeekdayCycle("2026-06-25", "2026-07-30") };
+  it("cae en el último jueves cuando el mes tiene menos ocurrencias", () => {
+    expect(ymd(closingInMonth(rule, 2026, 1)!)).toBe("2026-02-26"); // feb: sólo 4 jueves → último
+    expect(ymd(closingInMonth(rule, 2026, 7)!)).toBe("2026-08-27"); // agosto
+    expect(ymd(closingInMonth(rule, 2026, 8)!)).toBe("2026-09-24"); // septiembre
   });
 });
 
@@ -104,10 +114,9 @@ describe("closingInMonth", () => {
     expect(ymd(closingInMonth(uala, 2026, 1)!)).toBe("2026-02-27"); // febrero → hábil anterior
   });
   const patagonia: ClosingRule = { type: "weekday_cycle", ...deriveWeekdayCycle("2026-02-26", "2026-03-26") };
-  it("weekday_cycle: mes sin cierre devuelve null", () => {
-    // ciclo salta de 28-may a 02-jul → junio no tiene cierre
-    expect(closingInMonth(patagonia, 2026, 5)).toBeNull();
-    expect(ymd(closingInMonth(patagonia, 2026, 6)!)).toBe("2026-07-02");
+  it("weekday_cycle: cada mes tiene su cierre", () => {
+    expect(ymd(closingInMonth(patagonia, 2026, 5)!)).toBe("2026-06-25"); // junio
+    expect(ymd(closingInMonth(patagonia, 2026, 6)!)).toBe("2026-07-23"); // julio
   });
 });
 
@@ -133,10 +142,12 @@ describe("forwardClosingInMonth (ancla a 'ahora')", () => {
     expect(forwardClosingInMonth(uala, 2026, 3, hoy, start)).toBeNull(); // abril: antes del start
   });
   const patagonia: ClosingRule = { type: "weekday_cycle", ...deriveWeekdayCycle("2026-05-28", "2026-07-02") };
-  it("weekday_cycle: mes que el ciclo saltea → null", () => {
-    // 02-jul ya pasó; próximo 30-jul (offset 0 en julio); luego salta a septiembre → agosto null
-    expect(forwardClosingInMonth(patagonia, 2026, 6, hoy)?.offset).toBe(0); // julio 30
-    expect(forwardClosingInMonth(patagonia, 2026, 7, hoy)).toBeNull(); // agosto: no cierra
+  it("weekday_cycle: cierra todos los meses (agosto ya no queda vacío)", () => {
+    // ancla 02-jul (1er jueves); hoy 08-jul → el cierre de julio (02-jul) ya pasó
+    expect(forwardClosingInMonth(patagonia, 2026, 6, hoy)).toBeNull(); // julio ya cerró
+    const ago = forwardClosingInMonth(patagonia, 2026, 7, hoy); // agosto SÍ cierra
+    expect(ago && ymd(ago.closing)).toBe("2026-08-06");
+    expect(ago?.offset).toBe(0);
   });
 });
 

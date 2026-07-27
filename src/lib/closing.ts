@@ -69,6 +69,27 @@ function fixedClosingForMonth(year: number, month: number, day: number, business
   return d;
 }
 
+/** Date of the `ordinal`-th `weekday` (0=Sun..6=Sat) in a month, clamped to the last occurrence. */
+function nthWeekdayOfMonth(year: number, month: number, weekday: number, ordinal: number): Date {
+  const firstWd = new Date(year, month, 1).getDay();
+  const offset = (weekday - firstWd + 7) % 7; // days from the 1st to the first `weekday`
+  let day = 1 + offset + (ordinal - 1) * 7;
+  if (day > lastDayOfMonth(year, month)) day -= 7; // clamp to the last occurrence
+  return new Date(year, month, day);
+}
+
+/**
+ * A `weekday_cycle` card closes ONCE per calendar month, always on the same weekday and the same
+ * week-of-month as the anchor. Deriving both from the anchor date guarantees exactly one closing
+ * every month (a +28/+35 walk drifts and skips ~one month a year). `nextGap` is kept only for
+ * storage/back-compat and is intentionally not used here.
+ */
+function weekdayClosingForMonth(anchor: string, year: number, month: number): Date {
+  const a = parseYmd(anchor);
+  const ordinal = Math.ceil(a.getDate() / 7); // 1..5 = which occurrence of the weekday in its month
+  return nthWeekdayOfMonth(year, month, a.getDay(), ordinal);
+}
+
 /** Next closing date on or after `from` (defaults to today). */
 export function nextClosing(rule: ClosingRule, from: Date = new Date()): Date {
   const start = atMidnight(from);
@@ -81,26 +102,14 @@ export function nextClosing(rule: ClosingRule, from: Date = new Date()): Date {
     // fallback (shouldn't happen)
     return fixedClosingForMonth(start.getFullYear(), start.getMonth() + 1, rule.day, rule.businessAdjust);
   }
-  // weekday_cycle: walk forward from the anchor, or backward when `start` predates it
-  let c = parseYmd(rule.anchor);
-  let guard = 0;
-  if (c < start) {
-    let gap = rule.nextGap; // gap from c to the following closing
-    while (c < start && guard++ < 600) {
-      c = addDays(c, gap);
-      gap = gap === 28 ? 35 : 28;
-    }
-  } else {
-    // step backward while the previous closing is still >= start
-    let gapBack = rule.nextGap === 28 ? 35 : 28; // gap between the previous closing and the anchor
-    while (guard++ < 600) {
-      const prev = addDays(c, -gapBack);
-      if (prev < start) break;
-      c = prev;
-      gapBack = gapBack === 28 ? 35 : 28;
-    }
+  // weekday_cycle: one closing per calendar month — the first one on/after `start`
+  for (let i = 0; i < 24; i++) {
+    const base = new Date(start.getFullYear(), start.getMonth() + i, 1);
+    const c = weekdayClosingForMonth(rule.anchor, base.getFullYear(), base.getMonth());
+    if (c >= start) return c;
   }
-  return c;
+  const far = new Date(start.getFullYear(), start.getMonth() + 24, 1);
+  return weekdayClosingForMonth(rule.anchor, far.getFullYear(), far.getMonth());
 }
 
 /** The card's statement closing that falls within calendar (year, month), or null. */
@@ -188,27 +197,13 @@ export function lastClosingOnOrBefore(rule: ClosingRule, from: Date = new Date()
     }
     return null;
   }
-  // weekday_cycle
-  let c = parseYmd(rule.anchor);
-  let guard = 0;
-  if (c <= start) {
-    // walk forward keeping the last closing <= start
-    let gap = rule.nextGap;
-    while (guard++ < 600) {
-      const next = addDays(c, gap);
-      if (next > start) break;
-      c = next;
-      gap = gap === 28 ? 35 : 28;
-    }
-    return c;
+  // weekday_cycle: one closing per calendar month — the last one on/before `start`
+  for (let i = 0; i < 24; i++) {
+    const base = new Date(start.getFullYear(), start.getMonth() - i, 1);
+    const c = weekdayClosingForMonth(rule.anchor, base.getFullYear(), base.getMonth());
+    if (c <= start) return c;
   }
-  // anchor is in the future: step backward until a closing is <= start
-  let gapBack = rule.nextGap === 28 ? 35 : 28;
-  while (c > start && guard++ < 600) {
-    c = addDays(c, -gapBack);
-    gapBack = gapBack === 28 ? 35 : 28;
-  }
-  return c <= start ? c : null;
+  return null;
 }
 
 /**
