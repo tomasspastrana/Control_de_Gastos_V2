@@ -78,6 +78,7 @@ function toSnapshot(r: StatementSnapshotRow): StatementSnapshot {
     dueDate: r.dueDate,
     total: r.total,
     items: r.items ?? [],
+    paidAt: r.paidAt,
   };
 }
 

@@ -6,8 +6,9 @@ import { db } from "@/db";
 import { cards, debts, fixedExpenses, profiles, purchases, statementSnapshots } from "@/db/schema";
 import { createClient } from "@/lib/supabase/server";
 import { getAppData } from "@/lib/data";
-import { buildMonthSnapshots } from "@/lib/statements";
-import { cardSchema, closeMonthSchema, closingConfigSchema, debtSchema, fixedExpenseSchema, purchaseSchema, ratesSchema } from "@/lib/schemas";
+import { ymd } from "@/lib/closing";
+import { buildPaidSnapshot, statementPayState } from "@/lib/statements";
+import { cardSchema, closingConfigSchema, debtSchema, fixedExpenseSchema, purchaseSchema, ratesSchema } from "@/lib/schemas";
 
 async function requireUserId(): Promise<string> {
   const supabase = await createClient();
@@ -127,9 +128,46 @@ export async function payPurchaseDelta(id: string, delta: number) {
   done();
 }
 
-export async function payCard(cardId: string, ids: string[]) {
+// ---------- paying a statement (= closing it into history) ----------
+/**
+ * Pay the card's closed statement. Only the card id comes from the client — the statement
+ * itself is recomputed here from the user's own data, then frozen into `statement_snapshots`
+ * BEFORE any installment moves, so history records what was actually paid instead of being
+ * recalculated later from already-mutated state.
+ *
+ * The unique index on (user_id, card_id, period) is the double-payment lock: the insert either
+ * wins and we advance the installments, or it conflicts and we do nothing at all.
+ */
+export async function payCard(cardId: string): Promise<{ error?: string }> {
   const userId = await requireUserId();
-  // pay this statement: advance one installment only on the purchases billed this month
+  const data = await getAppData(userId);
+  const card = data.cards.find((c) => c.id === cardId);
+  if (!card) return { error: "Tarjeta inexistente" };
+
+  // rejections are returned, not thrown: Next redacts thrown messages in production, and the
+  // user needs to read *why* a payment didn't go through
+  const state = statementPayState(card, data.purchases, data.fixedExpenses, data.rates, data.snapshots);
+  if (state.kind === "no-rule") return { error: "Configurá el ciclo de cierre de la tarjeta" };
+  if (state.kind === "not-closed") return { error: "La tarjeta todavía no cerró" };
+  if (state.kind === "paid") return { error: "Ese resumen ya está pagado" };
+
+  const today = ymd(new Date());
+  const snapshot = buildPaidSnapshot(card, state.stmt, state.closing, today);
+  const inserted = await db
+    .insert(statementSnapshots)
+    .values({ ...snapshot, userId })
+    .onConflictDoNothing({
+      target: [statementSnapshots.userId, statementSnapshots.cardId, statementSnapshots.period],
+    })
+    .returning({ id: statementSnapshots.id });
+
+  // lost the race (double click, second tab): the statement is already paid, don't charge again
+  if (inserted.length === 0) {
+    done();
+    return { error: "Ese resumen ya está pagado" };
+  }
+
+  const ids = snapshot.items.map((i) => i.purchaseId).filter((id): id is string => !!id);
   if (ids.length > 0) {
     await db
       .update(purchases)
@@ -138,45 +176,45 @@ export async function payCard(cardId: string, ids: string[]) {
       })
       .where(and(inArray(purchases.id, ids), eq(purchases.userId, userId)));
   }
-  // stamp the payment day so the payment-due alert clears for this statement
   await db
     .update(cards)
-    .set({ lastPaymentAt: new Date().toISOString().slice(0, 10) })
+    .set({ lastPaymentAt: today })
     .where(and(eq(cards.id, cardId), eq(cards.userId, userId)));
   done();
+  return {};
 }
 
-// ---------- statement history ("Cerrar mes") ----------
-/** Freeze a calendar month's per-card statements into history (upsert per card+period). */
-export async function closeMonth(input: unknown) {
+/**
+ * Undo a statement payment: roll back exactly the installments the snapshot advanced, drop the
+ * history row and clear the payment stamp. The counterpart to the lock above — without it a
+ * mis-clicked payment would be permanent.
+ */
+export async function undoPayCard(cardId: string, period: string) {
   const userId = await requireUserId();
-  const { year, month } = closeMonthSchema.parse(input);
-  const data = await getAppData(userId);
-  const rows = buildMonthSnapshots(
-    data.cards,
-    data.purchases,
-    data.fixedExpenses,
-    data.rates,
-    year,
-    month,
-    new Date(),
-  ).map((r) => ({ ...r, userId }));
+  const [snapshot] = await db
+    .select()
+    .from(statementSnapshots)
+    .where(
+      and(
+        eq(statementSnapshots.userId, userId),
+        eq(statementSnapshots.cardId, cardId),
+        eq(statementSnapshots.period, period),
+      ),
+    );
+  if (!snapshot) return;
 
-  if (rows.length > 0) {
+  const ids = (snapshot.items ?? []).map((i) => i.purchaseId).filter((id): id is string => !!id);
+  if (ids.length > 0) {
     await db
-      .insert(statementSnapshots)
-      .values(rows)
-      .onConflictDoUpdate({
-        target: [statementSnapshots.userId, statementSnapshots.cardId, statementSnapshots.period],
-        set: {
-          nickname: sql`excluded.nickname`,
-          closingDate: sql`excluded.closing_date`,
-          dueDate: sql`excluded.due_date`,
-          total: sql`excluded.total`,
-          items: sql`excluded.items`,
-        },
-      });
+      .update(purchases)
+      .set({ paidInstallments: sql`greatest(0, ${purchases.paidInstallments} - 1)` })
+      .where(and(inArray(purchases.id, ids), eq(purchases.userId, userId)));
   }
+  await db.delete(statementSnapshots).where(eq(statementSnapshots.id, snapshot.id));
+  await db
+    .update(cards)
+    .set({ lastPaymentAt: null })
+    .where(and(eq(cards.id, cardId), eq(cards.userId, userId)));
   done();
 }
 

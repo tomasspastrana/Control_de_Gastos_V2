@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { reducer } from "./store";
-import type { AppData, Card, Debt, Purchase } from "./types";
+import type { AppData, Card, Debt, Purchase, StatementSnapshot } from "./types";
+
+const snap = (over: Partial<StatementSnapshot> = {}): StatementSnapshot => ({
+  id: "s1", cardId: "c1", period: "2026-07-01", nickname: "A",
+  closingDate: "2026-07-30", dueDate: "2026-08-07", total: 10,
+  items: [{ label: "m", sub: "cuota 3/6", amount: 10, kind: "purchase", purchaseId: "p1" }],
+  paidAt: "2026-07-08", ...over,
+});
 
 const base = (): AppData => ({
   rates: { ARS: 1, USD: 1000, EUR: 1200 },
@@ -44,18 +51,29 @@ describe("reducer", () => {
     expect(paid(s)).toBe(0);
   });
 
-  it("PAY_CARD advances only the billed purchases, clamped, and stamps lastPaymentAt", () => {
-    // 2/6 → 3/6 after paying the statement once (p1 is in this statement)
-    const s = reducer(base(), { type: "PAY_CARD", cardId: "c1", at: "2026-07-08", ids: ["p1"] });
+  it("PAY_CARD saves the snapshot, advances only the purchases it billed, and stamps lastPaymentAt", () => {
+    // 2/6 → 3/6 after paying the statement once (p1 is one of its lines)
+    const s = reducer(base(), { type: "PAY_CARD", cardId: "c1", at: "2026-07-08", snapshot: snap() });
     expect(s.purchases[0].paidInstallments).toBe(3);
     expect(s.cards[0].lastPaymentAt).toBe("2026-07-08");
-    // a purchase not in the statement is untouched
-    const s2 = reducer(base(), { type: "PAY_CARD", cardId: "c1", at: "2026-07-08", ids: [] });
+    expect(s.snapshots).toHaveLength(1);
+    // a statement made only of fixed expenses touches no purchase
+    const onlyFixed = snap({ items: [{ label: "Netflix", sub: "gasto fijo", amount: 5, kind: "fixed" }] });
+    const s2 = reducer(base(), { type: "PAY_CARD", cardId: "c1", at: "2026-07-08", snapshot: onlyFixed });
     expect(s2.purchases[0].paidInstallments).toBe(2);
-    // never exceeds the total number of installments
-    let f = base();
-    for (let i = 0; i < 10; i++) f = reducer(f, { type: "PAY_CARD", cardId: "c1", at: "2026-07-08", ids: ["p1"] });
-    expect(f.purchases[0].paidInstallments).toBe(6);
+  });
+
+  it("UNDO_PAY_CARD rolls back exactly what the snapshot advanced", () => {
+    const paid = reducer(base(), { type: "PAY_CARD", cardId: "c1", at: "2026-07-08", snapshot: snap() });
+    const undone = reducer(paid, { type: "UNDO_PAY_CARD", cardId: "c1", period: "2026-07-01" });
+    expect(undone.purchases[0].paidInstallments).toBe(2);
+    expect(undone.cards[0].lastPaymentAt).toBeNull();
+    expect(undone.snapshots).toHaveLength(0);
+  });
+
+  it("UNDO_PAY_CARD on a period with no snapshot is a no-op", () => {
+    const s = base();
+    expect(reducer(s, { type: "UNDO_PAY_CARD", cardId: "c1", period: "2026-06-01" })).toBe(s);
   });
 
   it("debt actions: add, delete, clamped pay", () => {

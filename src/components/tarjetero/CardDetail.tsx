@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
-import type { Card, FixedExpense, Purchase, Rates } from "@/lib/types";
+import type { Card, FixedExpense, Purchase, Rates, StatementSnapshot } from "@/lib/types";
 import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseInstallment, rate } from "@/lib/calc";
 import { currentDueClosing, dueDate, fmtClosing, paymentAlert, ruleFromCard } from "@/lib/closing";
-import { currentStatement } from "@/lib/statements";
+import { statementPayState, type CardStatement } from "@/lib/statements";
 import { updateCardClosing } from "@/app/actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CreditCardVisual } from "./CreditCardVisual";
@@ -14,6 +14,8 @@ import { ProgressBar } from "./ProgressBar";
 import { InstallmentDots } from "./InstallmentDots";
 import { PayControls } from "./PayControls";
 import { ClosingInfo } from "./ClosingInfo";
+import { StatementPayBox } from "./StatementPayBox";
+import { SettledPurchases } from "./SettledPurchases";
 import { ClosingFields, buildClosingPayload, formFromCard, type ClosingForm } from "./ClosingFields";
 
 interface Props {
@@ -21,10 +23,12 @@ interface Props {
   purchases: Purchase[];
   rates: Rates;
   fixedExpenses: FixedExpense[];
+  snapshots: StatementSnapshot[];
   onBack: () => void;
   onAddPurchase: () => void;
   onDeleteCard: () => void;
-  onPayAll: (ids: string[]) => void;
+  onPayStatement: (stmt: CardStatement, closing: Date) => void;
+  onUndoPayStatement: (period: string) => void;
   onPayDelta: (id: string, delta: number) => void;
   onDeletePurchase: (id: string) => void;
   onEditPurchase: (p: Purchase) => void;
@@ -34,9 +38,12 @@ interface Props {
   onDeleteFixed: (id: string) => void;
 }
 
-export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAddPurchase, onDeleteCard, onPayAll, onPayDelta, onDeletePurchase, onEditPurchase, onAddFixed, onEditFixed, onToggleFixed, onDeleteFixed }: Props) {
+export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, onBack, onAddPurchase, onDeleteCard, onPayStatement, onUndoPayStatement, onPayDelta, onDeletePurchase, onEditPurchase, onAddFixed, onEditFixed, onToggleFixed, onDeleteFixed }: Props) {
   const m = cardMetrics(card, purchases, rates, fixedExpenses);
   const ps = purchases.filter((p) => p.cardId === card.id);
+  // settled purchases fold away into their own group so they stop burying the active ones
+  const pending = ps.filter((p) => p.paidInstallments < p.installments);
+  const settled = ps.filter((p) => p.paidInstallments >= p.installments);
   const cardFixed = fixedExpenses.filter((f) => f.cardId === card.id);
 
   const rule = ruleFromCard(card);
@@ -44,9 +51,8 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
   // the statement due now (the resumen awaiting payment) — where each purchase's next cuota lands
   const curClosing = rule ? currentDueClosing(rule, new Date(), card.lastPaymentAt ?? null) : null;
   const curDue = curClosing && card.dueDays != null ? dueDate(curClosing, card.dueDays) : null;
-  // "Pagar tarjeta" = this month's statement (matches the Resúmenes total exactly)
-  const stmt = currentStatement(card, purchases, fixedExpenses, rates);
-  const payIds = stmt.items.filter((i) => i.purchaseId).map((i) => i.purchaseId!);
+  // can this card's statement be paid right now? (closed, and not already in history)
+  const payState = statementPayState(card, purchases, fixedExpenses, rates, snapshots);
 
   const [closingOpen, setClosingOpen] = useState(false);
   const [closingForm, setClosingForm] = useState<ClosingForm>(formFromCard(card));
@@ -123,11 +129,7 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
             </div>
           </div>
 
-          {stmt.total > 0.5 && (
-            <button onClick={() => onPayAll(payIds)} className="flex cursor-pointer items-center justify-center gap-2 rounded-[15px] border-none p-[13px] text-[13.5px] font-extrabold text-white" style={{ background: "#1c1c22", boxShadow: "0 10px 24px rgba(28,28,34,.28)" }}>
-              ✓ Pagar tarjeta · {fmt(stmt.total)}
-            </button>
-          )}
+          <StatementPayBox state={payState} onPay={onPayStatement} onUndo={onUndoPayStatement} />
           <button onClick={onDeleteCard} className="cursor-pointer rounded-[14px] p-[11px] text-[12.5px] font-bold" style={{ border: "1px solid rgba(214,69,90,.3)", background: "rgba(214,69,90,.06)", color: "var(--tj-danger)" }}>
             Eliminar tarjeta
           </button>
@@ -142,14 +144,13 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
             </button>
           </div>
 
-          {ps.length > 0 ? (
+          {pending.length > 0 ? (
             <div className="flex flex-col gap-3.5">
               <AnimatePresence initial={false}>
-                {ps.map((p) => {
+                {pending.map((p) => {
                   const tot = p.amount * rate(rates, p.currency);
                   const per = purchaseInstallment(p, rates);
                   const rem = (tot * (p.installments - p.paidInstallments)) / p.installments;
-                  const fullyPaid = p.paidInstallments >= p.installments;
                   return (
                     <motion.div
                       key={p.id}
@@ -168,15 +169,9 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
                             {p.category} · {fmtDate(p.date)} · {fmtCur(per, "ARS")}/cuota
                           </div>
                           {rule && (
-                            <div className="mt-1 inline-flex flex-wrap items-center gap-1 text-[11px] font-semibold" style={{ color: fullyPaid ? "var(--tj-good)" : "var(--tj-accent)" }}>
-                              {fullyPaid ? (
-                                <><span aria-hidden>✓</span> Cuotas saldadas</>
-                              ) : (
-                                <>
-                                  <span aria-hidden>🧾</span> Cuota {p.paidInstallments + 1}/{p.installments} · resumen cierra {curClosing && fmtClosing(curClosing)}
-                                  {curDue && <span style={{ color: "var(--tj-muted)" }}>· vence {fmtClosing(curDue)}</span>}
-                                </>
-                              )}
+                            <div className="mt-1 inline-flex flex-wrap items-center gap-1 text-[11px] font-semibold" style={{ color: "var(--tj-accent)" }}>
+                              <span aria-hidden>🧾</span> Cuota {p.paidInstallments + 1}/{p.installments} · resumen cierra {curClosing && fmtClosing(curClosing)}
+                              {curDue && <span style={{ color: "var(--tj-muted)" }}>· vence {fmtClosing(curDue)}</span>}
                             </div>
                           )}
                         </div>
@@ -212,11 +207,25 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, onBack, onAd
             </div>
           ) : (
             <div className="rounded-[20px] px-5 py-[50px] text-center text-sm font-semibold" style={{ background: "rgba(255,255,255,.5)", border: "1px dashed rgba(109,94,246,.3)", color: "#9a96b6" }}>
-              Todavía no hay compras en esta tarjeta.
-              <br />
-              Tocá <b style={{ color: "var(--tj-accent)" }}>+ Cargar compra</b> para empezar.
+              {settled.length > 0 ? (
+                <>Sin compras en curso: todas están saldadas.</>
+              ) : (
+                <>
+                  Todavía no hay compras en esta tarjeta.
+                  <br />
+                  Tocá <b style={{ color: "var(--tj-accent)" }}>+ Cargar compra</b> para empezar.
+                </>
+              )}
             </div>
           )}
+
+          <SettledPurchases
+            purchases={settled}
+            rates={rates}
+            onUnpay={(id) => onPayDelta(id, -1)}
+            onEdit={onEditPurchase}
+            onDelete={onDeletePurchase}
+          />
 
           {/* fixed expenses charged to this card */}
           <div className="mt-7 mb-3 flex items-center justify-between">

@@ -86,8 +86,9 @@ export const fixedExpenses = pgTable("fixed_expenses", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Statements frozen in history when the user closes a month ("Cerrar mes").
-// One row per (card, month). nickname/items are denormalized so history survives edits.
+// Statements frozen in history the moment they're paid ("Pagar resumen").
+// One row per (card, month) — the unique index below is also the double-payment lock.
+// nickname/items are denormalized so history survives later edits to the card or its purchases.
 export const statementSnapshots = pgTable(
   "statement_snapshots",
   {
@@ -96,12 +97,14 @@ export const statementSnapshots = pgTable(
     cardId: uuid("card_id")
       .notNull()
       .references(() => cards.id, { onDelete: "cascade" }),
-    period: date("period", { mode: "string" }).notNull(), // yyyy-mm-01 (closed month)
+    period: date("period", { mode: "string" }).notNull(), // yyyy-mm-01 (month the statement closed in)
     nickname: text("nickname").notNull(),
     closingDate: date("closing_date", { mode: "string" }),
     dueDate: date("due_date", { mode: "string" }),
     total: numeric("total", { precision: 14, scale: 2, mode: "number" }).notNull(),
     items: jsonb("items").$type<StatementSnapshotItem[]>().notNull().default([]),
+    // day the statement was paid (null only for rows reconstructed without a known date)
+    paidAt: date("paid_at", { mode: "string" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("statement_snapshots_user_card_period_uq").on(t.userId, t.cardId, t.period)],

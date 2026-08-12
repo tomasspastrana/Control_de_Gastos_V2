@@ -5,7 +5,16 @@
 
 import type { Card, Debt, FixedExpense, Purchase, Rates, StatementSnapshot } from "./types";
 import { debtsMonthly, fixedMonthly, purchaseInstallment, rate } from "./calc";
-import { currentDueClosing, dueDate, forwardClosingInMonth, ruleFromCard, ymd } from "./closing";
+import {
+  addDays,
+  currentDueClosing,
+  dueDate,
+  forwardClosingInMonth,
+  lastClosingOnOrBefore,
+  nextClosing,
+  ruleFromCard,
+  ymd,
+} from "./closing";
 
 export interface StatementItem {
   label: string;
@@ -84,21 +93,18 @@ export function cardStatement(
 }
 
 /**
- * The card's "current statement to pay" = offset 0 (the next closing from `from`): one cuota
- * #(paidInstallments+1) per pending purchase + active fixed expenses. This is what
- * "Pagar tarjeta" and "A pagar este mes" use, and it matches the current month in Resúmenes.
- * Cards without a billing cycle fall back to the same shape without dates.
+ * The statement billed at an explicit `closing` date: cuota #(paidInstallments+1) of every
+ * pending purchase + the card's active fixed expenses. Takes the closing as an argument so
+ * callers that already know which statement they mean (e.g. the one being paid) don't have to
+ * re-derive it and risk disagreeing. `closing = null` for cards without a billing cycle.
  */
-export function currentStatement(
+export function statementAt(
   card: Card,
   purchases: Purchase[],
   fixed: FixedExpense[],
   rates: Rates,
-  from: Date = new Date(),
+  closing: Date | null,
 ): CardStatement {
-  const rule = ruleFromCard(card);
-  const closing = rule ? currentDueClosing(rule, from, card.lastPaymentAt ?? null) : null;
-
   const items: StatementItem[] = [];
   for (const p of purchases) {
     if (p.cardId !== card.id || p.paidInstallments >= p.installments) continue;
@@ -117,6 +123,23 @@ export function currentStatement(
   const total = items.reduce((s, i) => s + i.amount, 0);
   const due = closing && card.dueDays != null ? dueDate(closing, card.dueDays) : null;
   return { cardId: card.id, nickname: card.nickname, closing, due, items, total };
+}
+
+/**
+ * The card's "current statement to pay" — `statementAt` anchored on the resumen actually due
+ * now (`currentDueClosing`). This is what "A pagar este mes" uses, and it matches the current
+ * month in Resúmenes. Cards without a billing cycle fall back to the same shape without dates.
+ */
+export function currentStatement(
+  card: Card,
+  purchases: Purchase[],
+  fixed: FixedExpense[],
+  rates: Rates,
+  from: Date = new Date(),
+): CardStatement {
+  const rule = ruleFromCard(card);
+  const closing = rule ? currentDueClosing(rule, from, card.lastPaymentAt ?? null) : null;
+  return statementAt(card, purchases, fixed, rates, closing);
 }
 
 export interface GeneralStatement {
@@ -178,31 +201,69 @@ export function periodKey(year: number, month: number): string {
 }
 
 /**
- * Freeze a calendar month into per-card snapshots (what "Cerrar mes" saves). Uses the exact
- * same `cardStatement` the Resúmenes tab shows for that month, so history matches the view.
- * Returns the persistable rows without id/userId (the server fills those; the client uses a
- * temp id for the optimistic update).
+ * Where a card stands with respect to paying its statement. A statement can only be paid once
+ * it has closed, and only once: the saved snapshot for its period IS the "already paid" record,
+ * so this never depends on `lastPaymentAt` (which says when, not what).
+ *  - `no-rule`     → no billing cycle configured, nothing to pay against
+ *  - `not-closed`  → the cycle has no closing behind us yet (brand-new anchor)
+ *  - `payable`     → the last closing's statement has no snapshot → pay it
+ *  - `paid`        → it's already in history; the next one opens at `nextClosing`
  */
-export function buildMonthSnapshots(
-  cards: Card[],
+export type PayState =
+  | { kind: "no-rule" }
+  | { kind: "not-closed"; nextClosing: Date }
+  | { kind: "payable"; closing: Date; due: Date | null; period: string; stmt: CardStatement }
+  | { kind: "paid"; closing: Date; period: string; snapshot: StatementSnapshot; nextClosing: Date };
+
+export function statementPayState(
+  card: Card,
   purchases: Purchase[],
   fixed: FixedExpense[],
   rates: Rates,
-  year: number,
-  month: number,
+  snapshots: StatementSnapshot[],
   from: Date = new Date(),
-): Omit<StatementSnapshot, "id">[] {
-  const period = periodKey(year, month);
-  return cards
-    .map((c) => ({ c, s: cardStatement(c, purchases, fixed, rates, year, month, from) }))
-    .filter(({ s }) => s.items.length > 0)
-    .map(({ c, s }) => ({
-      cardId: c.id,
-      period,
-      nickname: c.nickname,
-      closingDate: s.closing ? ymd(s.closing) : null,
-      dueDate: s.due ? ymd(s.due) : null,
-      total: s.total,
-      items: s.items.map((i) => ({ label: i.label, sub: i.sub, amount: i.amount, kind: i.kind })),
-    }));
+): PayState {
+  const rule = ruleFromCard(card);
+  if (!rule) return { kind: "no-rule" };
+
+  const closing = lastClosingOnOrBefore(rule, from);
+  if (!closing) return { kind: "not-closed", nextClosing: nextClosing(rule, from) };
+
+  const period = periodKey(closing.getFullYear(), closing.getMonth());
+  const snapshot = snapshots.find((s) => s.cardId === card.id && s.period === period);
+  if (snapshot) {
+    return { kind: "paid", closing, period, snapshot, nextClosing: nextClosing(rule, addDays(closing, 1)) };
+  }
+
+  const stmt = statementAt(card, purchases, fixed, rates, closing);
+  return { kind: "payable", closing, due: stmt.due, period, stmt };
+}
+
+/**
+ * Freeze a statement into a history row at payment time. The period is the month the statement
+ * CLOSED in (not the month it's paid in), which is where the Resúmenes tab looks it up.
+ * `purchaseId` is kept on each line so "Deshacer pago" can roll back exactly what it advanced.
+ */
+export function buildPaidSnapshot(
+  card: Card,
+  stmt: CardStatement,
+  closing: Date,
+  paidAt: string,
+): Omit<StatementSnapshot, "id"> {
+  return {
+    cardId: card.id,
+    period: periodKey(closing.getFullYear(), closing.getMonth()),
+    nickname: card.nickname,
+    closingDate: ymd(closing),
+    dueDate: stmt.due ? ymd(stmt.due) : null,
+    total: stmt.total,
+    items: stmt.items.map((i) => ({
+      label: i.label,
+      sub: i.sub,
+      amount: i.amount,
+      kind: i.kind,
+      ...(i.purchaseId ? { purchaseId: i.purchaseId } : {}),
+    })),
+    paidAt,
+  };
 }

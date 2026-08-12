@@ -1,10 +1,11 @@
 "use client";
 
 import { useOptimistic, useState, useTransition } from "react";
+import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 import { reducer, type Action } from "@/lib/store";
 import { THEMES, type AppData, type Card, type Debt, type FixedExpense, type Purchase, type Rates } from "@/lib/types";
-import { buildMonthSnapshots } from "@/lib/statements";
+import { buildPaidSnapshot, type CardStatement } from "@/lib/statements";
 import * as actions from "@/app/actions";
 import { AppShell } from "./AppShell";
 import { Sidebar } from "./Sidebar";
@@ -36,13 +37,15 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
   const [purchaseEdit, setPurchaseEdit] = useState<Purchase | null>(null);
 
   // apply optimistically + run the server action inside one transition
-  function run(action: Action, serverCall: () => Promise<void>) {
+  function run(action: Action, serverCall: () => Promise<void>, onError?: (message: string) => void) {
     startTransition(async () => {
       applyOptimistic(action);
       try {
         await serverCall();
-      } catch {
-        // on failure the revalidated server data replaces the optimistic state
+      } catch (e) {
+        // the revalidated server data replaces the optimistic state; a rejected mutation the
+        // user asked for (a statement already paid, say) has to say so instead of just snapping back
+        onError?.(e instanceof Error ? e.message : "No se pudo guardar");
       }
     });
   }
@@ -71,13 +74,30 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
   const openNewPurchase = () => { setPurchaseEdit(null); setModal("purchase"); };
   const openEditPurchase = (p: Purchase) => { setPurchaseEdit(p); setModal("purchase"); };
   const payDelta = (id: string, delta: number) => run({ type: "PAY_DELTA", id, delta }, () => actions.payPurchaseDelta(id, delta));
-  const payCard = (cardId: string, ids: string[]) => run({ type: "PAY_CARD", cardId, at: new Date().toLocaleDateString("en-CA"), ids }, () => actions.payCard(cardId, ids));
-  const closeMonth = (year: number, month: number) => {
-    const snaps = buildMonthSnapshots(optimistic.cards, optimistic.purchases, optimistic.fixedExpenses, optimistic.rates, year, month).map(
-      (s) => ({ ...s, id: `tmp-${s.cardId}-${s.period}` }),
+  // paying = freezing the statement into history; the server recomputes it, this is just the
+  // optimistic mirror so the card flips to "pagado" without waiting for the roundtrip
+  const payCard = (card: Card, stmt: CardStatement, closing: Date) => {
+    const at = new Date().toLocaleDateString("en-CA");
+    const snapshot = { ...buildPaidSnapshot(card, stmt, closing, at), id: `tmp-${card.id}-${at}` };
+    run(
+      { type: "PAY_CARD", cardId: card.id, at, snapshot },
+      async () => {
+        const { error } = await actions.payCard(card.id);
+        if (error) throw new Error(error);
+        toast.success(`Resumen de ${card.nickname} pagado y guardado en el historial`);
+      },
+      (msg) => toast.error(msg),
     );
-    run({ type: "CLOSE_MONTH", snapshots: snaps }, () => actions.closeMonth({ year, month }));
   };
+  const undoPayCard = (cardId: string, period: string) =>
+    run(
+      { type: "UNDO_PAY_CARD", cardId, period },
+      async () => {
+        await actions.undoPayCard(cardId, period);
+        toast.success("Pago deshecho");
+      },
+      (msg) => toast.error(msg),
+    );
   const createDebt = (d: Debt) => run({ type: "ADD_DEBT", debt: d }, () => actions.createDebt(d));
   const deleteDebt = (id: string) => run({ type: "DELETE_DEBT", id }, () => actions.deleteDebt(id));
   const payDebtDelta = (id: string, delta: number) => run({ type: "PAY_DEBT_DELTA", id, delta }, () => actions.payDebtDelta(id, delta));
@@ -131,10 +151,12 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
             purchases={optimistic.purchases}
             rates={optimistic.rates}
             fixedExpenses={optimistic.fixedExpenses}
+            snapshots={optimistic.snapshots}
             onBack={goHome}
             onAddPurchase={openNewPurchase}
             onDeleteCard={() => deleteCard(selectedCard.id)}
-            onPayAll={(ids) => payCard(selectedCard.id, ids)}
+            onPayStatement={(stmt, closing) => payCard(selectedCard, stmt, closing)}
+            onUndoPayStatement={(period) => undoPayCard(selectedCard.id, period)}
             onPayDelta={payDelta}
             onDeletePurchase={deletePurchase}
             onEditPurchase={openEditPurchase}
@@ -153,7 +175,6 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
             rates={optimistic.rates}
             snapshots={optimistic.snapshots}
             onOpenCard={openCard}
-            onCloseMonth={closeMonth}
           />
         )}
 

@@ -1,0 +1,1 @@
+ALTER TABLE "statement_snapshots" ADD COLUMN "paid_at" date;

@@ -268,3 +268,9 @@ export function fmtClosing(d: Date): string {
     .replace(/\./g, "")
     .replace(",", "");
 }
+
+/** Capitalized month label, e.g. "Julio 2026". */
+export function fmtMonth(d: Date): string {
+  const s = d.toLocaleDateString("es-AR", { month: "long", year: "numeric" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

@@ -64,24 +64,27 @@ export interface FixedExpense {
   occupiesLimit: boolean;
 }
 
-/** One line of a saved statement (mirrors a StatementItem, without the runtime purchaseId). */
+/** One line of a saved statement (mirrors a StatementItem). */
 export interface StatementSnapshotItem {
   label: string;
   sub: string;
   amount: number; // ARS
   kind: "purchase" | "fixed";
+  /** set for purchase lines — what "Deshacer pago" rolls back one installment on */
+  purchaseId?: string;
 }
 
-/** A card's statement frozen in history when a month is closed ("Cerrar mes"). */
+/** A card's statement frozen in history the moment it was paid ("Pagar resumen"). */
 export interface StatementSnapshot {
   id: string;
   cardId: string;
-  period: string; // yyyy-mm-01 — first day of the closed month
-  nickname: string; // card name at close time (survives if the card is later renamed)
+  period: string; // yyyy-mm-01 — first day of the month the statement closed in
+  nickname: string; // card name at payment time (survives if the card is later renamed)
   closingDate: string | null; // yyyy-mm-dd
   dueDate: string | null; // yyyy-mm-dd
   total: number; // ARS
   items: StatementSnapshotItem[];
+  paidAt: string | null; // yyyy-mm-dd — day it was paid
 }
 
 export interface AppData {

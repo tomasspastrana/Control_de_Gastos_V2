@@ -2,10 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { toast } from "sonner";
 import type { Card, FixedExpense, Purchase, Rates, StatementSnapshot } from "@/lib/types";
 import { fmt } from "@/lib/calc";
-import { fmtClosing, parseYmd, ruleFromCard } from "@/lib/closing";
+import { fmtClosing, fmtMonth, parseYmd, ruleFromCard } from "@/lib/closing";
 import { cardStatement, generalStatement, periodKey } from "@/lib/statements";
 import { StatTile } from "./StatTile";
 
@@ -16,15 +15,11 @@ interface Props {
   rates: Rates;
   snapshots: StatementSnapshot[];
   onOpenCard: (id: string) => void;
-  onCloseMonth: (year: number, month: number) => void;
 }
 
-const monthLabel = (y: number, m: number) => {
-  const s = new Date(y, m, 1).toLocaleDateString("es-AR", { month: "long", year: "numeric" });
-  return s.charAt(0).toUpperCase() + s.slice(1);
-};
+const monthLabel = (y: number, m: number) => fmtMonth(new Date(y, m, 1));
 
-export function StatementsView({ cards, purchases, fixedExpenses, rates, snapshots, onOpenCard, onCloseMonth }: Props) {
+export function StatementsView({ cards, purchases, fixedExpenses, rates, snapshots, onOpenCard }: Props) {
   const today = new Date();
   const [anchor, setAnchor] = useState({ y: today.getFullYear(), m: today.getMonth() });
   const isCurrent = anchor.y === today.getFullYear() && anchor.m === today.getMonth();
@@ -34,13 +29,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
     setAnchor({ y: d.getFullYear(), m: d.getMonth() });
   };
 
-  const general = useMemo(
-    () => generalStatement(cards, purchases, fixedExpenses, rates, anchor.y, anchor.m, today),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cards, purchases, fixedExpenses, rates, anchor],
-  );
-
-  // next-3-months projection (from the anchor)
+  // next-3-months projection (from the anchor) — always live, nothing ahead is paid yet
   const projection = useMemo(() => {
     return [1, 2, 3].map((k) => {
       const d = new Date(anchor.y, anchor.m + k, 1);
@@ -50,33 +39,51 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards, purchases, fixedExpenses, rates, anchor]);
 
-  // every card (so all of them are visible in "Por tarjeta", even with nothing due)
-  const perCardAll = useMemo(
-    () => cards.map((c) => ({ card: c, stmt: cardStatement(c, purchases, fixedExpenses, rates, anchor.y, anchor.m, today) })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cards, purchases, fixedExpenses, rates, anchor],
-  );
-
-  // saved (closed) statements for this month — the frozen historical record
   const periodStr = periodKey(anchor.y, anchor.m);
-  const monthSnaps = useMemo(
-    () => snapshots.filter((s) => s.period === periodStr).sort((a, b) => b.total - a.total),
-    [snapshots, periodStr],
+  const isPast = anchor.y * 12 + anchor.m < today.getFullYear() * 12 + today.getMonth();
+
+  /**
+   * One row per card, merged: a paid statement comes from its frozen snapshot, an unpaid one is
+   * computed live. Per card and not per month — a month where one card is paid and another isn't
+   * has to show both, which the old all-or-nothing "mes cerrado" flag hid.
+   */
+  const rows = useMemo(
+    () =>
+      cards.map((card) => {
+        const snap = snapshots.find((s) => s.cardId === card.id && s.period === periodStr);
+        if (snap) {
+          return {
+            card,
+            paid: true,
+            nickname: snap.nickname,
+            closing: snap.closingDate ? parseYmd(snap.closingDate) : null,
+            due: snap.dueDate ? parseYmd(snap.dueDate) : null,
+            paidAt: snap.paidAt ? parseYmd(snap.paidAt) : null,
+            total: snap.total,
+            items: snap.items,
+          };
+        }
+        const stmt = cardStatement(card, purchases, fixedExpenses, rates, anchor.y, anchor.m, today);
+        return {
+          card,
+          paid: false,
+          nickname: card.nickname,
+          closing: stmt.closing,
+          due: stmt.due,
+          paidAt: null,
+          total: stmt.total,
+          items: stmt.items,
+        };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [cards, purchases, fixedExpenses, rates, snapshots, anchor, periodStr],
   );
-  const isClosed = monthSnaps.length > 0;
-  const anchorIdx = anchor.y * 12 + anchor.m;
-  const canClose = anchorIdx <= today.getFullYear() * 12 + today.getMonth();
 
-  // unified "Resumen general" rows: from snapshots when the month is closed, else live
-  const generalTotal = isClosed ? monthSnaps.reduce((s, m) => s + m.total, 0) : general.total;
-  const generalRows = isClosed
-    ? monthSnaps.map((s) => ({ key: s.cardId, nickname: s.nickname, dueLabel: s.dueDate ? fmtClosing(parseYmd(s.dueDate)) : null, total: s.total }))
-    : general.perCard.map((c) => ({ key: c.cardId, nickname: c.nickname, dueLabel: c.due ? fmtClosing(c.due) : null, total: c.total }));
-
-  const handleClose = () => {
-    onCloseMonth(anchor.y, anchor.m);
-    toast.success(`Resumen de ${monthLabel(anchor.y, anchor.m)} guardado`);
-  };
+  const billed = useMemo(() => [...rows].filter((r) => r.items.length > 0).sort((a, b) => b.total - a.total), [rows]);
+  const generalTotal = billed.reduce((s, r) => s + r.total, 0);
+  const paidTotal = billed.filter((r) => r.paid).reduce((s, r) => s + r.total, 0);
+  const anyPaid = paidTotal > 0;
+  const allPaid = anyPaid && billed.every((r) => r.paid);
 
   const navBtn = (label: string, onClick: () => void) => (
     <button onClick={onClick} className="cursor-pointer rounded-[11px] px-3 py-2 text-[13px] font-bold" style={{ border: "1px solid rgba(120,110,180,.22)", background: "rgba(255,255,255,.6)", color: "var(--tj-debt)" }}>
@@ -86,7 +93,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.32, ease: [0.2, 0.8, 0.2, 1] }}>
-      <div className="mb-1 text-[12.5px] font-semibold" style={{ color: "var(--tj-muted)", letterSpacing: ".02em" }}>Calculado del cronograma de cuotas</div>
+      <div className="mb-1 text-[12.5px] font-semibold" style={{ color: "var(--tj-muted)", letterSpacing: ".02em" }}>Los resúmenes pagados se guardan solos; el resto sale del cronograma de cuotas</div>
       <h1 className="mt-0.5 mb-4 text-[28px] font-extrabold tracking-tight">Resúmenes</h1>
 
       {/* month navigator */}
@@ -94,49 +101,48 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
         {navBtn("← Mes anterior", () => move(-1))}
         <div className="flex min-w-[150px] flex-col items-center">
           <span className="text-[16px] font-extrabold tracking-tight">{monthLabel(anchor.y, anchor.m)}</span>
-          {isClosed && <span className="text-[10.5px] font-bold" style={{ color: "var(--tj-good)" }}>✓ mes cerrado</span>}
+          {allPaid && <span className="text-[10.5px] font-bold" style={{ color: "var(--tj-good)" }}>✓ todo pagado</span>}
         </div>
         {navBtn("Mes siguiente →", () => move(1))}
         {!isCurrent && navBtn("Hoy", () => setAnchor({ y: today.getFullYear(), m: today.getMonth() }))}
-        {canClose && (
-          <button
-            onClick={handleClose}
-            className="ml-auto cursor-pointer rounded-[11px] px-3.5 py-2 text-[13px] font-bold text-white"
-            style={{ border: "none", background: isClosed ? "rgba(109,94,246,.85)" : "#1c1c22", boxShadow: "0 8px 18px rgba(28,28,34,.22)" }}
-            title="Guarda el resumen de este mes en el historial"
-          >
-            {isClosed ? "Actualizar cierre" : "✓ Cerrar mes"}
-          </button>
-        )}
       </div>
 
       {/* GENERAL */}
       <h2 className="mb-3 text-[17px] font-extrabold tracking-tight">Resumen general</h2>
-      {generalRows.length > 0 ? (
+      {billed.length > 0 ? (
         <div className="tj-glass mb-4 max-w-[720px]" style={{ padding: "20px 22px", borderRadius: 22 }}>
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div>
               <div className="text-[12px] font-semibold" style={{ color: "var(--tj-muted)" }}>
-                {isClosed ? "Total pagado" : "Total a pagar"} · {monthLabel(anchor.y, anchor.m)}
+                {allPaid ? "Total pagado" : "Total del mes"} · {monthLabel(anchor.y, anchor.m)}
               </div>
               <div className="text-[26px] font-extrabold tracking-tight" style={{ color: "var(--tj-debt)", fontVariantNumeric: "tabular-nums" }}>{fmt(generalTotal)}</div>
+              {anyPaid && !allPaid && (
+                <div className="mt-0.5 text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
+                  <span style={{ color: "var(--tj-good)" }}>{fmt(paidTotal)} pagado</span> · {fmt(generalTotal - paidTotal)} pendiente
+                </div>
+              )}
             </div>
           </div>
           <div className="flex flex-col gap-1">
-            {generalRows.map((c) => (
-              <div key={c.key} className="tj-row flex items-center gap-3 py-2" style={{ borderTop: "1px solid rgba(120,110,180,.12)" }}>
-                <span className="min-w-0 flex-1 text-[13.5px] font-bold" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.nickname}</span>
-                {c.dueLabel && <span className="text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>vence {c.dueLabel}</span>}
-                <span className="text-[14px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(c.total)}</span>
+            {billed.map((r) => (
+              <div key={r.card.id} className="tj-row flex items-center gap-3 py-2" style={{ borderTop: "1px solid rgba(120,110,180,.12)" }}>
+                <span className="min-w-0 flex-1 text-[13.5px] font-bold" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.nickname}</span>
+                {r.paid ? (
+                  <PaidChip />
+                ) : (
+                  r.due && <span className="text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>vence {fmtClosing(r.due)}</span>
+                )}
+                <span className="text-[14px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(r.total)}</span>
               </div>
             ))}
           </div>
         </div>
       ) : (
         <div className="mb-4 max-w-[720px] rounded-[20px] px-5 py-10 text-center text-sm font-semibold" style={{ background: "rgba(255,255,255,.5)", border: "1px dashed rgba(109,94,246,.3)", color: "#9a96b6" }}>
-          {canClose
-            ? `Nada a pagar en ${monthLabel(anchor.y, anchor.m)}.`
-            : `Sin resumen guardado de ${monthLabel(anchor.y, anchor.m)}.`}
+          {isPast
+            ? `Sin resúmenes pagados en ${monthLabel(anchor.y, anchor.m)}.`
+            : `Nada a pagar en ${monthLabel(anchor.y, anchor.m)}.`}
         </div>
       )}
 
@@ -149,68 +155,37 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
 
       {/* PER CARD */}
       <h2 className="mb-3 text-[17px] font-extrabold tracking-tight">Por tarjeta</h2>
-      {isClosed ? (
-        // frozen historical record for a closed month
+      {cards.length > 0 ? (
+        // one card per card, paid ones from their frozen snapshot and the rest computed live
         <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))" }}>
-          {monthSnaps.map((s) => (
-            <div key={s.cardId} className="tj-glass-soft" style={{ padding: 20, borderRadius: 22 }}>
-              <button onClick={() => onOpenCard(s.cardId)} className="mb-3 flex w-full cursor-pointer items-start justify-between gap-3 border-none bg-transparent p-0 text-left">
-                <div className="min-w-0">
-                  <div className="text-[15.5px] font-extrabold tracking-tight">{s.nickname}</div>
-                  <div className="mt-px text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
-                    {s.closingDate ? <>cerró {fmtClosing(parseYmd(s.closingDate))}</> : "resumen guardado"}
-                    {s.dueDate && <> · venció {fmtClosing(parseYmd(s.dueDate))}</>}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-base font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-debt)" }}>{fmt(s.total)}</div>
-                  <div className="text-[10.5px] font-semibold" style={{ color: "var(--tj-good)" }}>pagado</div>
-                </div>
-              </button>
-              {s.items.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  {s.items.map((it, i) => (
-                    <div key={i} className="flex items-center gap-2.5 py-1.5" style={{ borderTop: "1px solid rgba(120,110,180,.1)" }}>
-                      <span style={{ width: 9, height: 9, borderRadius: 3, flex: "none", background: it.kind === "fixed" ? "var(--tj-muted-2)" : "var(--tj-accent)" }} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[13px] font-bold" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</div>
-                        <div className="text-[11px] font-semibold" style={{ color: "var(--tj-muted)" }}>{it.sub}</div>
-                      </div>
-                      <span className="text-[13px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-ink)" }}>{fmt(it.amount)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : cards.length > 0 ? (
-        // live view — every card is shown, with an empty state when nothing is due
-        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))" }}>
-          {perCardAll.map(({ card, stmt }) => {
-            const hasRule = !!ruleFromCard(card);
-            const emptyMsg = !hasRule
+          {rows.map((r) => {
+            const emptyMsg = !ruleFromCard(r.card)
               ? "Configurá el ciclo de cierre para ver su resumen."
-              : !stmt.closing
-                ? `No cierra resumen en ${monthLabel(anchor.y, anchor.m)}.`
-                : "Sin cuotas ni gastos pendientes este mes.";
+              : isPast
+                ? `Sin pago registrado en ${monthLabel(anchor.y, anchor.m)}.`
+                : !r.closing
+                  ? `No cierra resumen en ${monthLabel(anchor.y, anchor.m)}.`
+                  : "Sin cuotas ni gastos pendientes este mes.";
             return (
-              <div key={card.id} className="tj-glass-soft" style={{ padding: 20, borderRadius: 22 }}>
-                <button onClick={() => onOpenCard(card.id)} className="mb-3 flex w-full cursor-pointer items-start justify-between gap-3 border-none bg-transparent p-0 text-left">
+              <div key={r.card.id} className="tj-glass-soft" style={{ padding: 20, borderRadius: 22 }}>
+                <button onClick={() => onOpenCard(r.card.id)} className="mb-3 flex w-full cursor-pointer items-start justify-between gap-3 border-none bg-transparent p-0 text-left">
                   <div className="min-w-0">
-                    <div className="text-[15.5px] font-extrabold tracking-tight">{card.nickname}</div>
+                    <div className="text-[15.5px] font-extrabold tracking-tight">{r.nickname}</div>
                     <div className="mt-px text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
-                      {stmt.closing ? <>cierra {fmtClosing(stmt.closing)}</> : "sin cierre este mes"}{stmt.due && <> · vence {fmtClosing(stmt.due)}</>}
+                      {r.closing ? <>{r.paid ? "cerró" : "cierra"} {fmtClosing(r.closing)}</> : "sin cierre este mes"}
+                      {r.due && <> · {r.paid ? "venció" : "vence"} {fmtClosing(r.due)}</>}
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-base font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-debt)" }}>{fmt(stmt.total)}</div>
-                    <div className="text-[10.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>total del mes</div>
+                    <div className="text-base font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-debt)" }}>{fmt(r.total)}</div>
+                    <div className="text-[10.5px] font-semibold" style={{ color: r.paid ? "var(--tj-good)" : "var(--tj-muted)" }}>
+                      {r.paid ? (r.paidAt ? `pagado ${fmtClosing(r.paidAt)}` : "pagado") : "total del mes"}
+                    </div>
                   </div>
                 </button>
-                {stmt.items.length > 0 ? (
+                {r.items.length > 0 ? (
                   <div className="flex flex-col gap-1.5">
-                    {stmt.items.map((it, i) => (
+                    {r.items.map((it, i) => (
                       <div key={i} className="flex items-center gap-2.5 py-1.5" style={{ borderTop: "1px solid rgba(120,110,180,.1)" }}>
                         <span style={{ width: 9, height: 9, borderRadius: 3, flex: "none", background: it.kind === "fixed" ? "var(--tj-muted-2)" : "var(--tj-accent)" }} />
                         <div className="min-w-0 flex-1">
@@ -234,5 +209,16 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
         </div>
       )}
     </motion.div>
+  );
+}
+
+function PaidChip() {
+  return (
+    <span
+      className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+      style={{ background: "rgba(47,158,111,.14)", color: "var(--tj-good)" }}
+    >
+      pagado
+    </span>
   );
 }

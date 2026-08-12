@@ -11,7 +11,8 @@ export type Action =
   | { type: "EDIT_PURCHASE"; id: string; patch: Partial<Purchase> }
   | { type: "DELETE_PURCHASE"; id: string }
   | { type: "PAY_DELTA"; id: string; delta: number }
-  | { type: "PAY_CARD"; cardId: string; at: string; ids: string[] }
+  | { type: "PAY_CARD"; cardId: string; at: string; snapshot: StatementSnapshot }
+  | { type: "UNDO_PAY_CARD"; cardId: string; period: string }
   | { type: "ADD_DEBT"; debt: Debt }
   | { type: "DELETE_DEBT"; id: string }
   | { type: "PAY_DEBT_DELTA"; id: string; delta: number }
@@ -19,8 +20,12 @@ export type Action =
   | { type: "EDIT_FIXED"; id: string; patch: Partial<FixedExpense> }
   | { type: "DELETE_FIXED"; id: string }
   | { type: "TOGGLE_FIXED"; id: string }
-  | { type: "CLOSE_MONTH"; snapshots: StatementSnapshot[] }
   | { type: "SET_RATES"; rates: Partial<Rates> };
+
+/** The purchases a snapshot advanced one installment on. */
+function snapshotPurchaseIds(s: StatementSnapshot): Set<string> {
+  return new Set(s.items.map((i) => i.purchaseId).filter((id): id is string => !!id));
+}
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -66,9 +71,9 @@ export function reducer(state: AppData, action: Action): AppData {
       };
 
     case "PAY_CARD": {
-      // pay this statement: advance one installment only on the purchases billed this month,
-      // and record the payment day so the payment-due alert clears
-      const ids = new Set(action.ids);
+      // paying freezes the statement into history and advances one installment on exactly the
+      // purchases it billed; the snapshot is also what marks the statement as already paid
+      const ids = snapshotPurchaseIds(action.snapshot);
       return {
         ...state,
         cards: state.cards.map((c) =>
@@ -79,6 +84,25 @@ export function reducer(state: AppData, action: Action): AppData {
             ? { ...p, paidInstallments: clamp(p.paidInstallments + 1, 0, p.installments) }
             : p,
         ),
+        snapshots: [...state.snapshots, action.snapshot],
+      };
+    }
+
+    case "UNDO_PAY_CARD": {
+      const snap = state.snapshots.find(
+        (s) => s.cardId === action.cardId && s.period === action.period,
+      );
+      if (!snap) return state;
+      const ids = snapshotPurchaseIds(snap);
+      return {
+        ...state,
+        cards: state.cards.map((c) => (c.id === action.cardId ? { ...c, lastPaymentAt: null } : c)),
+        purchases: state.purchases.map((p) =>
+          ids.has(p.id)
+            ? { ...p, paidInstallments: clamp(p.paidInstallments - 1, 0, p.installments) }
+            : p,
+        ),
+        snapshots: state.snapshots.filter((s) => s !== snap),
       };
     }
 
@@ -119,13 +143,6 @@ export function reducer(state: AppData, action: Action): AppData {
           f.id === action.id ? { ...f, active: !f.active } : f,
         ),
       };
-
-    case "CLOSE_MONTH": {
-      // replace any existing snapshots for the same card+period, then add the fresh ones
-      const keys = new Set(action.snapshots.map((s) => `${s.cardId}|${s.period}`));
-      const kept = state.snapshots.filter((s) => !keys.has(`${s.cardId}|${s.period}`));
-      return { ...state, snapshots: [...kept, ...action.snapshots] };
-    }
 
     case "SET_RATES":
       return { ...state, rates: { ...state.rates, ...action.rates } };

@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { amountDueThisMonth, cardStatement, currentStatement, generalStatement } from "./statements";
+import {
+  amountDueThisMonth,
+  buildPaidSnapshot,
+  cardStatement,
+  currentStatement,
+  generalStatement,
+  statementPayState,
+} from "./statements";
 import { parseYmd, ymd } from "./closing";
-import type { Card, Debt, FixedExpense, Purchase, Rates } from "./types";
+import type { Card, Debt, FixedExpense, Purchase, Rates, StatementSnapshot } from "./types";
 
 const rates: Rates = { ARS: 1, USD: 1000, EUR: 1200 };
 
@@ -88,6 +95,61 @@ describe("generalStatement", () => {
     const g = generalStatement([card, card2], purchases, [], rates, 2026, 6, hoy);
     expect(g.perCard).toHaveLength(2);
     expect(g.total).toBe(10_000 + 20_000);
+  });
+});
+
+describe("statementPayState (un resumen se paga una sola vez, y recién cuando cerró)", () => {
+  const purchases = [p({ id: "a", installments: 3, paidInstallments: 1 })];
+  const paidSnap = (over: Partial<StatementSnapshot> = {}): StatementSnapshot => ({
+    id: "s", cardId: "c1", period: "2026-06-01", nickname: "Ualá",
+    closingDate: "2026-06-30", dueDate: "2026-07-08", total: 10_000,
+    items: [{ label: "m", sub: "cuota 2/3", amount: 10_000, kind: "purchase", purchaseId: "a" }],
+    paidAt: "2026-07-02", ...over,
+  });
+
+  it("sin ciclo de cierre no hay nada que pagar", () => {
+    const noRule: Card = { ...card, closingRuleType: null, closingDay: null };
+    expect(statementPayState(noRule, purchases, [], rates, [], hoy).kind).toBe("no-rule");
+  });
+
+  it("el último resumen cerrado y sin snapshot es pagable", () => {
+    const st = statementPayState(card, purchases, [], rates, [], hoy);
+    expect(st.kind).toBe("payable");
+    if (st.kind !== "payable") return;
+    expect(ymd(st.closing)).toBe("2026-06-30"); // el 30-jun cerró; hoy es 08-jul
+    expect(st.period).toBe("2026-06-01");
+    expect(st.stmt.items[0].sub).toBe("cuota 2/3");
+  });
+
+  it("con el snapshot de ese período guardado ya está pagado: no se puede pagar de nuevo", () => {
+    const st = statementPayState(card, purchases, [], rates, [paidSnap()], hoy);
+    expect(st.kind).toBe("paid");
+    if (st.kind !== "paid") return;
+    expect(ymd(st.nextClosing)).toBe("2026-07-30"); // el próximo se habilita al cerrar julio
+  });
+
+  it("el snapshot de otra tarjeta u otro período no bloquea el pago", () => {
+    expect(statementPayState(card, purchases, [], rates, [paidSnap({ cardId: "otra" })], hoy).kind).toBe("payable");
+    expect(statementPayState(card, purchases, [], rates, [paidSnap({ period: "2026-05-01" })], hoy).kind).toBe("payable");
+  });
+
+  it("no depende de lastPaymentAt (los pagos viejos no dejaron snapshot)", () => {
+    const stamped: Card = { ...card, lastPaymentAt: "2026-07-02" };
+    expect(statementPayState(stamped, purchases, [], rates, [], hoy).kind).toBe("payable");
+  });
+});
+
+describe("buildPaidSnapshot", () => {
+  it("archiva el resumen en el mes en que CERRÓ, no en el que se paga", () => {
+    const closing = parseYmd("2026-06-30");
+    const stmt = cardStatement(card, [p({ id: "a", installments: 3, paidInstallments: 1 })], [], rates, 2026, 5, hoy);
+    const snap = buildPaidSnapshot(card, stmt, closing, "2026-07-08"); // pagado en julio
+    expect(snap.period).toBe("2026-06-01");
+    expect(snap.closingDate).toBe("2026-06-30");
+    expect(snap.paidAt).toBe("2026-07-08");
+    // el purchaseId viaja en el jsonb para poder deshacer el pago exacto
+    expect(snap.items[0].purchaseId).toBe("a");
+    expect(snap.total).toBe(stmt.total);
   });
 });
 

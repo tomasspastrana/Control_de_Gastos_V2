@@ -302,6 +302,19 @@ button:not(:disabled):active {
 .tj-row:hover {
   background: rgba(109, 94, 246, 0.07);
 }
+/* collapsed "Compras saldadas" group — the caret turns when the group opens */
+.tj-settled > summary::-webkit-details-marker {
+  display: none;
+}
+.tj-settled > summary:hover {
+  background: rgba(109, 94, 246, 0.07);
+}
+.tj-settled-caret {
+  transition: transform 0.2s var(--tj-ease);
+}
+.tj-settled[open] .tj-settled-caret {
+  transform: rotate(90deg);
+}
 /* sidebar items nudge on hover (transform doesn't fight inline bg) */
 .tj-sidebtn {
   transition: transform 0.24s var(--tj-ease), box-shadow 0.24s var(--tj-ease), background-color 0.24s var(--tj-ease);
