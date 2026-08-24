@@ -5,9 +5,11 @@ interface Props {
   onUnpay: () => void;
   onDelete: () => void;
   onEdit?: () => void;
+  /** why paying is unavailable, shown on hover when `canPay` is false */
+  payTitle?: string;
 }
 
-export function PayControls({ canPay, canUnpay, onPay, onUnpay, onDelete, onEdit }: Props) {
+export function PayControls({ canPay, canUnpay, onPay, onUnpay, onDelete, onEdit, payTitle }: Props) {
   return (
     <div className="flex gap-2">
       {onEdit && (
@@ -46,6 +48,7 @@ export function PayControls({ canPay, canUnpay, onPay, onUnpay, onDelete, onEdit
       <button
         onClick={onPay}
         disabled={!canPay}
+        title={!canPay ? payTitle : undefined}
         style={{
           border: "none",
           background: canPay ? "#1c1c22" : "rgba(0,0,0,.08)",

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   type ClosingRule,
   closingInMonth,
+  closingSpan,
   currentDueClosing,
   forwardClosingInMonth,
   deriveWeekdayCycle,
@@ -104,6 +105,22 @@ describe("purchaseStatement", () => {
   });
   it("sin dueDays devuelve due null", () => {
     expect(purchaseStatement(uala, parseYmd("2026-06-10"), null).due).toBeNull();
+  });
+});
+
+describe("closingSpan", () => {
+  it("cuenta resúmenes de distancia, con signo", () => {
+    expect(closingSpan(parseYmd("2026-08-23"), parseYmd("2026-08-23"))).toBe(0);
+    expect(closingSpan(parseYmd("2026-08-23"), parseYmd("2026-09-23"))).toBe(1);
+    expect(closingSpan(parseYmd("2026-09-23"), parseYmd("2026-08-23"))).toBe(-1); // todavía no facturable
+  });
+  it("cruza el fin de año", () => {
+    expect(closingSpan(parseYmd("2026-12-23"), parseYmd("2027-01-23"))).toBe(1);
+    expect(closingSpan(parseYmd("2026-11-30"), parseYmd("2027-02-27"))).toBe(3);
+  });
+  it("solo mira el mes: el día exacto del cierre no cambia la cuenta", () => {
+    // el ancla de weekday_cycle se mueve dentro del mes, pero sigue siendo un cierre por mes
+    expect(closingSpan(parseYmd("2026-08-27"), parseYmd("2026-09-24"))).toBe(1);
   });
 });
 

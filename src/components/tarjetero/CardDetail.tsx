@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import type { Card, FixedExpense, Purchase, Rates, StatementSnapshot } from "@/lib/types";
 import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseInstallment, rate } from "@/lib/calc";
 import { currentDueClosing, dueDate, fmtClosing, paymentAlert, ruleFromCard } from "@/lib/closing";
-import { statementPayState, type CardStatement } from "@/lib/statements";
+import { purchaseNextClosing, statementPayState, type CardStatement } from "@/lib/statements";
 import { updateCardClosing } from "@/app/actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CreditCardVisual } from "./CreditCardVisual";
@@ -48,9 +48,9 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
 
   const rule = ruleFromCard(card);
   const alert = rule ? paymentAlert(rule, card.dueDays ?? null, m.debt > 0.5, card.lastPaymentAt ?? null) : null;
-  // the statement due now (the resumen awaiting payment) — where each purchase's next cuota lands
+  // the statement due now (the resumen awaiting payment) — the anchor each purchase is placed
+  // against; one bought after it closed lands in a later statement (see purchaseNextClosing)
   const curClosing = rule ? currentDueClosing(rule, new Date(), card.lastPaymentAt ?? null) : null;
-  const curDue = curClosing && card.dueDays != null ? dueDate(curClosing, card.dueDays) : null;
   // can this card's statement be paid right now? (closed, and not already in history)
   const payState = statementPayState(card, purchases, fixedExpenses, rates, snapshots);
 
@@ -151,6 +151,10 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
                   const tot = p.amount * rate(rates, p.currency);
                   const per = purchaseInstallment(p, rates);
                   const rem = (tot * (p.installments - p.paidInstallments)) / p.installments;
+                  // bought after the card closed → its first cuota waits for a later statement
+                  const pClosing = rule && curClosing ? purchaseNextClosing(rule, p, curClosing) : curClosing;
+                  const deferred = !!(curClosing && pClosing && pClosing > curClosing);
+                  const pDue = pClosing && card.dueDays != null ? dueDate(pClosing, card.dueDays) : null;
                   return (
                     <motion.div
                       key={p.id}
@@ -159,7 +163,7 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }}
                       className="tj-glass-soft"
-                      style={{ padding: "18px 20px", borderRadius: 20 }}
+                      style={{ padding: "18px 20px", borderRadius: 20, opacity: deferred ? 0.6 : 1 }}
                     >
                       <div className="mb-3.5 flex items-start gap-[13px]">
                         <span style={{ width: 34, height: 34, borderRadius: 11, flex: "none", background: hexA(catColor(p.category), 0.16), display: "flex", alignItems: "center", justifyContent: "center" }} />
@@ -169,9 +173,17 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
                             {p.category} · {fmtDate(p.date)} · {fmtCur(per, "ARS")}/cuota
                           </div>
                           {rule && (
-                            <div className="mt-1 inline-flex flex-wrap items-center gap-1 text-[11px] font-semibold" style={{ color: "var(--tj-accent)" }}>
-                              <span aria-hidden>🧾</span> Cuota {p.paidInstallments + 1}/{p.installments} · resumen cierra {curClosing && fmtClosing(curClosing)}
-                              {curDue && <span style={{ color: "var(--tj-muted)" }}>· vence {fmtClosing(curDue)}</span>}
+                            <div className="mt-1 inline-flex flex-wrap items-center gap-1 text-[11px] font-semibold" style={{ color: deferred ? "var(--tj-muted-2)" : "var(--tj-accent)" }}>
+                              {deferred ? (
+                                <>
+                                  <span aria-hidden>⏳</span> Entra en el resumen que cierra {pClosing && fmtClosing(pClosing)}
+                                </>
+                              ) : (
+                                <>
+                                  <span aria-hidden>🧾</span> Cuota {p.paidInstallments + 1}/{p.installments} · resumen cierra {curClosing && fmtClosing(curClosing)}
+                                </>
+                              )}
+                              {pDue && <span style={{ color: "var(--tj-muted)" }}>· vence {fmtClosing(pDue)}</span>}
                             </div>
                           )}
                         </div>
@@ -192,8 +204,9 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
                           {p.paidInstallments}/{p.installments} cuotas · <span className="font-semibold" style={{ color: "var(--tj-muted)" }}>resta {fmt(rem)}</span>
                         </div>
                         <PayControls
-                          canPay={p.paidInstallments < p.installments}
+                          canPay={p.paidInstallments < p.installments && !deferred}
                           canUnpay={p.paidInstallments > 0}
+                          payTitle={deferred && pClosing ? `Todavía no se facturó: entra en el resumen que cierra el ${fmtClosing(pClosing)}` : undefined}
                           onPay={() => onPayDelta(p.id, 1)}
                           onUnpay={() => onPayDelta(p.id, -1)}
                           onDelete={() => onDeletePurchase(p.id)}

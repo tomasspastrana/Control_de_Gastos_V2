@@ -186,6 +186,15 @@ export function purchaseStatement(
   return { closing, due: dueDays != null ? dueDate(closing, dueDays) : null };
 }
 
+/**
+ * How many statements apart two closings are: 0 = the same one, negative when `b` comes first.
+ * Both rule shapes close exactly once per calendar month (see `weekdayClosingForMonth`), so the
+ * statement distance is just the month distance.
+ */
+export function closingSpan(a: Date, b: Date): number {
+  return b.getFullYear() * 12 + b.getMonth() - (a.getFullYear() * 12 + a.getMonth());
+}
+
 /** Most recent closing on or before `from` (the statement currently awaiting payment). */
 export function lastClosingOnOrBefore(rule: ClosingRule, from: Date = new Date()): Date | null {
   const start = atMidnight(from);

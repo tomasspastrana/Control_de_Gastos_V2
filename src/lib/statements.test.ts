@@ -5,9 +5,10 @@ import {
   cardStatement,
   currentStatement,
   generalStatement,
+  purchaseNextClosing,
   statementPayState,
 } from "./statements";
-import { parseYmd, ymd } from "./closing";
+import { parseYmd, ruleFromCard, ymd } from "./closing";
 import type { Card, Debt, FixedExpense, Purchase, Rates, StatementSnapshot } from "./types";
 
 const rates: Rates = { ARS: 1, USD: 1000, EUR: 1200 };
@@ -70,6 +71,60 @@ describe("cardStatement: un resumen ya cerrado este mes no se pierde (bug 'A pag
     expect(jul.closing && ymd(jul.closing)).toBe("2026-07-23");
     expect(jul.items).toHaveLength(1);
     expect(jul.total).toBe(10_000);
+  });
+});
+
+describe("una compra posterior al cierre entra recién en el resumen siguiente", () => {
+  // SUCREDITO-style: cierra el 23, vence 9 días después. Hoy 24-ago: el resumen cerró ayer.
+  const suc: Card = { ...card, id: "s1", nickname: "Sucredito", closingDay: 23, closingBusinessAdjust: false, dueDays: 9 };
+  const hoy24 = parseYmd("2026-08-24");
+  // comprada el 13-ago (antes del cierre) → ya facturada
+  const mueble = p({ id: "mueble", cardId: "s1", merchant: "Mueble Valen", date: "2026-08-13", amount: 600_000, installments: 6, paidInstallments: 0 });
+  // comprada el 24-ago (un día DESPUÉS del cierre) → todavía no facturada
+  const soporte = p({ id: "soporte", cardId: "s1", merchant: "Soporte Compu", date: "2026-08-24", amount: 20_000, installments: 1, paidInstallments: 0 });
+  const mantenimiento: FixedExpense[] = [
+    { id: "mant", cardId: "s1", name: "Mantenimiento", amount: 12_000, currency: "ARS", category: "Servicios", active: true, occupiesLimit: true },
+  ];
+
+  it("no se suma al resumen que ya cerró", () => {
+    const ago = cardStatement(suc, [mueble, soporte], mantenimiento, rates, 2026, 7, hoy24);
+    expect(ymd(ago.closing!)).toBe("2026-08-23");
+    expect(ago.items.map((i) => i.label)).toEqual(["Mueble Valen", "Mantenimiento"]);
+    expect(ago.items[0].sub).toBe("cuota 1/6");
+    expect(ago.total).toBe(100_000 + 12_000); // sin los 20.000 de Soporte Compu
+  });
+
+  it("aparece en el resumen siguiente, y las demás avanzan una cuota", () => {
+    const sept = cardStatement(suc, [mueble, soporte], mantenimiento, rates, 2026, 8, hoy24);
+    expect(ymd(sept.closing!)).toBe("2026-09-23");
+    expect(sept.items.filter((i) => i.kind === "purchase").map((i) => `${i.label} ${i.sub}`)).toEqual([
+      "Mueble Valen cuota 2/6",
+      "Soporte Compu cuota 1/1",
+    ]);
+  });
+
+  it("`currentStatement` y el total a pagar tampoco la incluyen", () => {
+    const cs = currentStatement(suc, [mueble, soporte], mantenimiento, rates, hoy24);
+    expect(cs.items.map((i) => i.purchaseId)).toEqual(["mueble", undefined]);
+    expect(cs.total).toBe(112_000);
+
+    const st = statementPayState(suc, [mueble, soporte], mantenimiento, rates, [], hoy24);
+    expect(st.kind).toBe("payable");
+    if (st.kind === "payable") expect(st.stmt.total).toBe(112_000);
+  });
+
+  it("la fecha solo empuja hacia adelante: una compra vieja sigue mandada por sus cuotas pagadas", () => {
+    // cargada a mano en marzo con 2/6 pagadas → la próxima sigue siendo la 3, no la que diría el calendario
+    const vieja = p({ id: "v", cardId: "s1", date: "2026-03-05", amount: 600_000, installments: 6, paidInstallments: 2 });
+    const ago = cardStatement(suc, [vieja], [], rates, 2026, 7, hoy24);
+    expect(ago.items[0].sub).toBe("cuota 3/6");
+  });
+
+  it("purchaseNextClosing: la diferida espera al cierre siguiente, la vieja usa el ancla", () => {
+    const rule = ruleFromCard(suc)!;
+    const anchor = parseYmd("2026-08-23");
+    expect(ymd(purchaseNextClosing(rule, soporte, anchor))).toBe("2026-09-23");
+    expect(ymd(purchaseNextClosing(rule, mueble, anchor))).toBe("2026-08-23");
   });
 });
 

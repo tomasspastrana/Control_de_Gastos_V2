@@ -1,18 +1,25 @@
-// Derived monthly statements ("resúmenes"). Scheduling is anchored to "now": the purchase
-// date is informational only — what places each installment is how many are already paid.
-// The next unpaid installment lands in the CURRENT statement (offset 0 = next closing), and
-// the following ones in the next closings. Recurring fixed expenses appear every statement.
+// Derived monthly statements ("resúmenes"). Two things place an installment, and the later one
+// wins: how many cuotas are already paid (the next unpaid one lands in the CURRENT statement,
+// offset 0), and the purchase's own date — nothing can be billed before the first closing on or
+// after it, so a purchase made the day after the card closed waits for the next statement.
+// The date only ever pushes an installment FORWARD, never back: a backdated purchase loaded with
+// "cuotas pagadas" still resumes from where the user says it is.
+// Recurring fixed expenses appear in every statement.
 
 import type { Card, Debt, FixedExpense, Purchase, Rates, StatementSnapshot } from "./types";
 import { debtsMonthly, fixedMonthly, purchaseInstallment, rate } from "./calc";
 import {
   addDays,
+  closingSpan,
   currentDueClosing,
   dueDate,
   forwardClosingInMonth,
   lastClosingOnOrBefore,
   nextClosing,
+  parseYmd,
+  purchaseStatement,
   ruleFromCard,
+  type ClosingRule,
   ymd,
 } from "./closing";
 
@@ -33,6 +40,26 @@ export interface CardStatement {
   total: number;
 }
 
+/** First closing that can bill this purchase — the first one on/after the day it was made. */
+function firstClosingOf(rule: ClosingRule, p: Pick<Purchase, "date">): Date {
+  return purchaseStatement(rule, parseYmd(p.date), null).closing;
+}
+
+/**
+ * The closing whose statement bills this purchase's next cuota: the card's anchor, unless the
+ * purchase is younger than it (bought after the card closed) and has to wait for a later one.
+ * Takes just the date so the "where would this land?" preview in the new-purchase form can use
+ * the very same rule the scheduler does.
+ */
+export function purchaseNextClosing(
+  rule: ClosingRule,
+  p: Pick<Purchase, "date">,
+  cardAnchor: Date,
+): Date {
+  const first = firstClosingOf(rule, p);
+  return first > cardAnchor ? first : cardAnchor;
+}
+
 function fixedItem(f: FixedExpense, rates: Rates): StatementItem {
   return {
     label: f.name,
@@ -45,7 +72,8 @@ function fixedItem(f: FixedExpense, rates: Rates): StatementItem {
 /**
  * One card's statement for calendar (year, month), anchored to `from` (today).
  * `offset` (0 = current/next closing) decides which installment number of each purchase falls
- * here: the (paidInstallments + 1 + offset)-th, as long as it's still pending.
+ * here: the (paidInstallments + 1 + offset)-th, as long as it's still pending — capped per
+ * purchase so nothing is billed before its own first closing.
  */
 export function cardStatement(
   card: Card,
@@ -70,8 +98,11 @@ export function cardStatement(
   for (const p of purchases) {
     if (p.cardId !== card.id) continue;
     const remaining = p.installments - p.paidInstallments;
-    if (offset < remaining) {
-      const cuota = p.paidInstallments + 1 + offset;
+    // a purchase counts statements from its own first closing when that's later than the card's
+    // anchor; `min` keeps the paid-installments anchor winning for everything older
+    const pOffset = Math.min(offset, closingSpan(firstClosingOf(rule, p), closing));
+    if (pOffset >= 0 && pOffset < remaining) {
+      const cuota = p.paidInstallments + 1 + pOffset;
       items.push({
         label: p.merchant,
         sub: `cuota ${cuota}/${p.installments}`,
@@ -94,9 +125,10 @@ export function cardStatement(
 
 /**
  * The statement billed at an explicit `closing` date: cuota #(paidInstallments+1) of every
- * pending purchase + the card's active fixed expenses. Takes the closing as an argument so
- * callers that already know which statement they mean (e.g. the one being paid) don't have to
- * re-derive it and risk disagreeing. `closing = null` for cards without a billing cycle.
+ * pending purchase that has already reached this statement + the card's active fixed expenses.
+ * Takes the closing as an argument so callers that already know which statement they mean
+ * (e.g. the one being paid) don't have to re-derive it and risk disagreeing.
+ * `closing = null` for cards without a billing cycle — nothing to defer against there.
  */
 export function statementAt(
   card: Card,
@@ -105,9 +137,13 @@ export function statementAt(
   rates: Rates,
   closing: Date | null,
 ): CardStatement {
+  const rule = ruleFromCard(card);
   const items: StatementItem[] = [];
   for (const p of purchases) {
     if (p.cardId !== card.id || p.paidInstallments >= p.installments) continue;
+    // bought after this statement closed → it lands in a later one (this is `cardStatement`'s
+    // rule at offset 0, where the only thing `min` can do is defer)
+    if (rule && closing && closingSpan(firstClosingOf(rule, p), closing) < 0) continue;
     items.push({
       label: p.merchant,
       sub: `cuota ${p.paidInstallments + 1}/${p.installments}`,
