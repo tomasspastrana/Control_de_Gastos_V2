@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-type Mode = "login" | "signup";
+type Mode = "login" | "signup" | "forgot";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,6 +16,17 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
+  useEffect(() => {
+    // Bridge for the emails sent from the Supabase dashboard: those links carry no PKCE verifier,
+    // so they come back as a `#access_token=...` fragment instead of `?code=`. They land on the
+    // Site URL ("/"), the proxy bounces a session-less visitor here, and the fragment survives
+    // both hops — so this is where we can catch it and hand it to the new-password screen.
+    const hash = window.location.hash;
+    if (hash.includes("type=recovery")) {
+      window.location.replace(`/auth/nueva-clave${hash}`);
+    }
+  }, []);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -23,7 +34,14 @@ export default function LoginPage() {
     setLoading(true);
     const supabase = createClient();
     try {
-      if (mode === "login") {
+      if (mode === "forgot") {
+        await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth/callback?next=/auth/nueva-clave`,
+        });
+        // deliberately the same answer whether or not the account exists, so this can't be used
+        // to find out which emails are registered
+        setInfo("Si hay una cuenta con ese email, te mandamos un link para crear una contraseña nueva.");
+      } else if (mode === "login") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         router.push("/");
@@ -64,29 +82,37 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* tabs */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 20, background: "rgba(109,94,246,.08)", padding: 4, borderRadius: 12 }}>
-          {(["login", "signup"] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => { setMode(m); setError(null); setInfo(null); }}
-              style={{
-                flex: 1,
-                padding: "9px",
-                border: "none",
-                borderRadius: 9,
-                cursor: "pointer",
-                fontWeight: 700,
-                fontSize: 13,
-                background: mode === m ? "#fff" : "transparent",
-                color: mode === m ? "var(--tj-debt)" : "var(--tj-muted-2)",
-                boxShadow: mode === m ? "0 2px 8px rgba(80,70,160,.12)" : "none",
-              }}
-            >
-              {m === "login" ? "Ingresar" : "Crear cuenta"}
-            </button>
-          ))}
-        </div>
+        {/* tabs — hidden while recovering, where there's only one thing to do */}
+        {mode !== "forgot" && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 20, background: "rgba(109,94,246,.08)", padding: 4, borderRadius: 12 }}>
+            {(["login", "signup"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => { setMode(m); setError(null); setInfo(null); }}
+                style={{
+                  flex: 1,
+                  padding: "9px",
+                  border: "none",
+                  borderRadius: 9,
+                  cursor: "pointer",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  background: mode === m ? "#fff" : "transparent",
+                  color: mode === m ? "var(--tj-debt)" : "var(--tj-muted-2)",
+                  boxShadow: mode === m ? "0 2px 8px rgba(80,70,160,.12)" : "none",
+                }}
+              >
+                {m === "login" ? "Ingresar" : "Crear cuenta"}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {mode === "forgot" && (
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--tj-muted-2)", marginBottom: 16 }}>
+            Poné tu email y te mandamos un link para crear una contraseña nueva.
+          </div>
+        )}
 
         <form onSubmit={onSubmit}>
           {mode === "signup" && (
@@ -99,17 +125,39 @@ export default function LoginPage() {
             <label className="tj-label">Email</label>
             <input className="tj-input" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="vos@email.com" />
           </div>
-          <div className="tj-field">
-            <label className="tj-label">Contraseña</label>
-            <input className="tj-input" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
-          </div>
+          {mode !== "forgot" && (
+            <div className="tj-field">
+              <label className="tj-label">Contraseña</label>
+              <input className="tj-input" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+            </div>
+          )}
+
+          {mode === "login" && (
+            <button
+              type="button"
+              onClick={() => { setMode("forgot"); setError(null); setInfo(null); }}
+              style={{ border: "none", background: "transparent", padding: 0, marginBottom: 12, cursor: "pointer", fontSize: 12, fontWeight: 700, color: "var(--tj-accent)" }}
+            >
+              ¿Olvidaste tu contraseña?
+            </button>
+          )}
 
           {error && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--tj-danger)", margin: "4px 0 12px" }}>{error}</div>}
           {info && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--tj-good)", margin: "4px 0 12px" }}>{info}</div>}
 
           <button type="submit" className="tj-submit" disabled={loading} style={{ marginTop: 4 }}>
-            {loading ? "Un momento…" : mode === "login" ? "Ingresar" : "Crear cuenta"}
+            {loading ? "Un momento…" : mode === "login" ? "Ingresar" : mode === "signup" ? "Crear cuenta" : "Enviarme el link"}
           </button>
+
+          {mode === "forgot" && (
+            <button
+              type="button"
+              onClick={() => { setMode("login"); setError(null); setInfo(null); }}
+              style={{ display: "block", width: "100%", border: "none", background: "transparent", padding: 0, marginTop: 14, cursor: "pointer", fontSize: 12, fontWeight: 700, color: "var(--tj-muted-2)" }}
+            >
+              ← Volver al login
+            </button>
+          )}
         </form>
       </div>
     </div>
