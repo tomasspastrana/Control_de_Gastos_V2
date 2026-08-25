@@ -35,8 +35,10 @@ export default function LoginPage() {
     const supabase = createClient();
     try {
       if (mode === "forgot") {
+        // an exact path with no query string: it has to match the Redirect URLs allow list
+        // character for character, or Supabase quietly sends the email to the Site URL instead
         await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/auth/callback?next=/auth/nueva-clave`,
+          redirectTo: `${window.location.origin}/auth/recuperar`,
         });
         // deliberately the same answer whether or not the account exists, so this can't be used
         // to find out which emails are registered

@@ -10,7 +10,12 @@ describe("safeNext", () => {
   it("cae al fallback cuando no viene nada", () => {
     expect(safeNext(null)).toBe("/");
     expect(safeNext("")).toBe("/");
-    expect(safeNext(null, "/login")).toBe("/login");
+    // el mail de recuperación llega sin `next`: el fallback es el destino real, no un borde
+    expect(safeNext(null, "/auth/nueva-clave")).toBe("/auth/nueva-clave");
+  });
+
+  it("un destino externo cae al fallback dado, no al destino externo", () => {
+    expect(safeNext("https://evil.com", "/auth/nueva-clave")).toBe("/auth/nueva-clave");
   });
 
   it("rechaza destinos externos (open redirect)", () => {
