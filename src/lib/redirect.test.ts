@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { safeNext } from "./redirect";
+import { isEmailOtpType, safeNext } from "./redirect";
 
 describe("safeNext", () => {
   it("acepta rutas del propio sitio", () => {
@@ -19,5 +19,20 @@ describe("safeNext", () => {
     expect(safeNext("//evil.com")).toBe("/"); // protocol-relative
     expect(safeNext("/\\evil.com")).toBe("/"); // algunos navegadores lo tratan como //
     expect(safeNext("javascript:alert(1)")).toBe("/");
+  });
+});
+
+describe("isEmailOtpType", () => {
+  it("acepta los tipos que usa Supabase", () => {
+    expect(isEmailOtpType("recovery")).toBe(true);
+    expect(isEmailOtpType("signup")).toBe(true);
+    expect(isEmailOtpType("email_change")).toBe(true);
+  });
+
+  it("rechaza cualquier otra cosa que venga en la URL", () => {
+    expect(isEmailOtpType(null)).toBe(false);
+    expect(isEmailOtpType("")).toBe(false);
+    expect(isEmailOtpType("cualquiera")).toBe(false);
+    expect(isEmailOtpType("RECOVERY")).toBe(false); // Supabase los manda en minúscula
   });
 });
