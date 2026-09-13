@@ -98,7 +98,7 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard,
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 16, marginBottom: 28 }}>
         <StatTile
           label="A pagar este mes · tarjetas + deudas + fijos"
-          value={<OwnAmount main={monthlyDue.total} alt={monthlyDue.ownTotal} altLabel="Lo que debés vos" />}
+          value={<OwnAmount main={monthlyDue.ownTotal} alt={monthlyDue.total} altLabel="Total real (con lo de otros)" />}
           valueColor="var(--tj-debt)"
         />
         <StatTile label="Límite total" value={fmt(t.limit)} />

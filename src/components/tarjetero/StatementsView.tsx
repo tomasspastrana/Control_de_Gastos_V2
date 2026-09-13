@@ -86,6 +86,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
   const generalTotal = billed.reduce((s, r) => s + r.total, 0);
   const generalOwn = billed.reduce((s, r) => s + r.ownTotal, 0);
   const paidTotal = billed.filter((r) => r.paid).reduce((s, r) => s + r.total, 0);
+  const paidOwn = billed.filter((r) => r.paid).reduce((s, r) => s + r.ownTotal, 0);
   const anyPaid = paidTotal > 0;
   const allPaid = anyPaid && billed.every((r) => r.paid);
 
@@ -121,11 +122,11 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
                 {allPaid ? "Total pagado" : "Total del mes"} · {monthLabel(anchor.y, anchor.m)}
               </div>
               <div className="text-[26px] font-extrabold tracking-tight" style={{ color: "var(--tj-debt)", fontVariantNumeric: "tabular-nums" }}>
-                <OwnAmount main={generalTotal} alt={generalOwn} altLabel="Lo que debés vos" iconSize={16} />
+                <OwnAmount main={generalOwn} alt={generalTotal} altLabel="Total real del resumen" iconSize={16} />
               </div>
               {anyPaid && !allPaid && (
                 <div className="mt-0.5 text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
-                  <span style={{ color: "var(--tj-good)" }}>{fmt(paidTotal)} pagado</span> · {fmt(generalTotal - paidTotal)} pendiente
+                  <span style={{ color: "var(--tj-good)" }}>{fmt(paidOwn)} pagado</span> · {fmt(generalOwn - paidOwn)} pendiente
                 </div>
               )}
             </div>
@@ -139,7 +140,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
                 ) : (
                   r.due && <span className="text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>vence {fmtClosing(r.due)}</span>
                 )}
-                <span className="text-[14px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums" }}><OwnAmount main={r.total} alt={r.ownTotal} altLabel="Lo que debés vos" /></span>
+                <span className="text-[14px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums" }}><OwnAmount main={r.ownTotal} alt={r.total} altLabel="Total real del resumen" /></span>
               </div>
             ))}
           </div>
@@ -155,7 +156,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
       {/* projection */}
       <div className="mb-8 grid max-w-[720px] gap-3" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))" }}>
         {projection.map((pr) => (
-          <StatTile key={pr.key} label={pr.label} value={<OwnAmount main={pr.total} alt={pr.ownTotal} altLabel="Lo que debés vos" />} />
+          <StatTile key={pr.key} label={pr.label} value={<OwnAmount main={pr.ownTotal} alt={pr.total} altLabel="Total real del resumen" />} />
         ))}
       </div>
 
@@ -183,7 +184,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-base font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-debt)" }}><OwnAmount main={r.total} alt={r.ownTotal} altLabel="Lo que debés vos" /></div>
+                    <div className="text-base font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-debt)" }}><OwnAmount main={r.ownTotal} alt={r.total} altLabel="Total real del resumen" /></div>
                     <div className="text-[10.5px] font-semibold" style={{ color: r.paid ? "var(--tj-good)" : "var(--tj-muted)" }}>
                       {r.paid ? (r.paidAt ? `pagado ${fmtClosing(r.paidAt)}` : "pagado") : "total del mes"}
                     </div>
@@ -202,7 +203,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
                           </div>
                         </div>
                         <span className="text-[13px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-ink)" }}>
-                          <OwnAmount main={it.amount} alt={it.own ?? it.amount} altLabel="Tu parte" iconSize={11} />
+                          <OwnAmount main={it.own ?? it.amount} alt={it.amount} altLabel="Total de la línea" iconSize={11} />
                         </span>
                       </div>
                     ))}

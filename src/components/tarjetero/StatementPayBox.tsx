@@ -53,7 +53,7 @@ export function StatementPayBox({ state, onPay, onUndo }: Props) {
             </div>
             <div className="mt-0.5 text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
               {snapshot.paidAt ? `el ${fmtClosing(parseYmd(snapshot.paidAt))} · ` : ""}
-              <OwnAmount main={snapshot.total} alt={snapshotOwnTotal(snapshot)} altLabel="Lo que debías vos" iconSize={11} />
+              <OwnAmount main={snapshotOwnTotal(snapshot)} alt={snapshot.total} altLabel="Total real pagado" iconSize={11} />
             </div>
           </div>
           <button
@@ -91,7 +91,7 @@ export function StatementPayBox({ state, onPay, onUndo }: Props) {
         className="flex cursor-pointer items-center justify-center gap-2 rounded-[15px] border-none p-[13px] text-[13.5px] font-extrabold text-white"
         style={{ background: "#1c1c22", boxShadow: "0 10px 24px rgba(28,28,34,.28)" }}
       >
-        ✓ Pagar resumen · <OwnAmount main={stmt.total} alt={stmt.ownTotal} altLabel="Lo que debés vos" />
+        ✓ Pagar resumen · <OwnAmount main={stmt.ownTotal} alt={stmt.total} altLabel="Total real a pagar al banco" />
       </button>
       <div className="text-center text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
         Cerró {fmtClosing(closing)}
