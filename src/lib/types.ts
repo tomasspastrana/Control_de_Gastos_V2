@@ -41,6 +41,10 @@ export interface Purchase {
   paidInstallments: number;
   category: string;
   date: string; // ISO yyyy-mm-dd
+  /** who else this purchase belongs to (shared card / lent card); null = mine */
+  sharedWith: string | null;
+  /** my share in percent (0..100); always 100 when sharedWith is null */
+  myPct: number;
 }
 
 export interface Debt {
@@ -74,6 +78,9 @@ export interface StatementSnapshotItem {
   kind: "purchase" | "fixed";
   /** set for purchase lines — what "Deshacer pago" rolls back one installment on */
   purchaseId?: string;
+  /** my part of `amount` (ARS); absent on snapshots saved before shared purchases existed (= amount) */
+  own?: number;
+  sharedWith?: string;
 }
 
 /** A card's statement frozen in history the moment it was paid ("Pagar resumen"). */

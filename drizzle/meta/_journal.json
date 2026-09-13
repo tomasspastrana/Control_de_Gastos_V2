@@ -50,6 +50,13 @@
       "when": 1789281007059,
       "tag": "0006_cultured_romulus",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789286628167,
+      "tag": "0007_common_wild_pack",
+      "breakpoints": true
     }
   ]
 }

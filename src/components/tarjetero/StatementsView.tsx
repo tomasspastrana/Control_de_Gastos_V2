@@ -5,8 +5,9 @@ import { motion } from "motion/react";
 import type { Card, FixedExpense, Purchase, Rates, StatementSnapshot } from "@/lib/types";
 import { fmt } from "@/lib/calc";
 import { fmtClosing, fmtMonth, parseYmd, ruleFromCard } from "@/lib/closing";
-import { cardStatement, generalStatement, periodKey } from "@/lib/statements";
+import { cardStatement, generalStatement, periodKey, snapshotOwnTotal } from "@/lib/statements";
 import { StatTile } from "./StatTile";
+import { OwnAmount } from "./OwnAmount";
 
 interface Props {
   cards: Card[];
@@ -34,7 +35,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
     return [1, 2, 3].map((k) => {
       const d = new Date(anchor.y, anchor.m + k, 1);
       const g = generalStatement(cards, purchases, fixedExpenses, rates, d.getFullYear(), d.getMonth(), today);
-      return { key: `${d.getFullYear()}-${d.getMonth()}`, label: monthLabel(d.getFullYear(), d.getMonth()), total: g.total };
+      return { key: `${d.getFullYear()}-${d.getMonth()}`, label: monthLabel(d.getFullYear(), d.getMonth()), total: g.total, ownTotal: g.ownTotal };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards, purchases, fixedExpenses, rates, anchor]);
@@ -60,6 +61,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
             due: snap.dueDate ? parseYmd(snap.dueDate) : null,
             paidAt: snap.paidAt ? parseYmd(snap.paidAt) : null,
             total: snap.total,
+            ownTotal: snapshotOwnTotal(snap),
             items: snap.items,
           };
         }
@@ -72,6 +74,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
           due: stmt.due,
           paidAt: null,
           total: stmt.total,
+          ownTotal: stmt.ownTotal,
           items: stmt.items,
         };
       }),
@@ -81,6 +84,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
 
   const billed = useMemo(() => [...rows].filter((r) => r.items.length > 0).sort((a, b) => b.total - a.total), [rows]);
   const generalTotal = billed.reduce((s, r) => s + r.total, 0);
+  const generalOwn = billed.reduce((s, r) => s + r.ownTotal, 0);
   const paidTotal = billed.filter((r) => r.paid).reduce((s, r) => s + r.total, 0);
   const anyPaid = paidTotal > 0;
   const allPaid = anyPaid && billed.every((r) => r.paid);
@@ -116,7 +120,9 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
               <div className="text-[12px] font-semibold" style={{ color: "var(--tj-muted)" }}>
                 {allPaid ? "Total pagado" : "Total del mes"} · {monthLabel(anchor.y, anchor.m)}
               </div>
-              <div className="text-[26px] font-extrabold tracking-tight" style={{ color: "var(--tj-debt)", fontVariantNumeric: "tabular-nums" }}>{fmt(generalTotal)}</div>
+              <div className="text-[26px] font-extrabold tracking-tight" style={{ color: "var(--tj-debt)", fontVariantNumeric: "tabular-nums" }}>
+                <OwnAmount main={generalTotal} alt={generalOwn} altLabel="Lo que debés vos" iconSize={16} />
+              </div>
               {anyPaid && !allPaid && (
                 <div className="mt-0.5 text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
                   <span style={{ color: "var(--tj-good)" }}>{fmt(paidTotal)} pagado</span> · {fmt(generalTotal - paidTotal)} pendiente
@@ -133,7 +139,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
                 ) : (
                   r.due && <span className="text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>vence {fmtClosing(r.due)}</span>
                 )}
-                <span className="text-[14px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(r.total)}</span>
+                <span className="text-[14px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums" }}><OwnAmount main={r.total} alt={r.ownTotal} altLabel="Lo que debés vos" /></span>
               </div>
             ))}
           </div>
@@ -149,7 +155,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
       {/* projection */}
       <div className="mb-8 grid max-w-[720px] gap-3" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))" }}>
         {projection.map((pr) => (
-          <StatTile key={pr.key} label={pr.label} value={fmt(pr.total)} />
+          <StatTile key={pr.key} label={pr.label} value={<OwnAmount main={pr.total} alt={pr.ownTotal} altLabel="Lo que debés vos" />} />
         ))}
       </div>
 
@@ -177,7 +183,7 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-base font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-debt)" }}>{fmt(r.total)}</div>
+                    <div className="text-base font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-debt)" }}><OwnAmount main={r.total} alt={r.ownTotal} altLabel="Lo que debés vos" /></div>
                     <div className="text-[10.5px] font-semibold" style={{ color: r.paid ? "var(--tj-good)" : "var(--tj-muted)" }}>
                       {r.paid ? (r.paidAt ? `pagado ${fmtClosing(r.paidAt)}` : "pagado") : "total del mes"}
                     </div>
@@ -190,9 +196,14 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
                         <span style={{ width: 9, height: 9, borderRadius: 3, flex: "none", background: it.kind === "fixed" ? "var(--tj-muted-2)" : "var(--tj-accent)" }} />
                         <div className="min-w-0 flex-1">
                           <div className="text-[13px] font-bold" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.label}</div>
-                          <div className="text-[11px] font-semibold" style={{ color: "var(--tj-muted)" }}>{it.sub}</div>
+                          <div className="text-[11px] font-semibold" style={{ color: "var(--tj-muted)" }}>
+                            {it.sub}
+                            {it.sharedWith && <> · <span style={{ color: "var(--tj-accent)" }}>{it.sharedWith}</span></>}
+                          </div>
                         </div>
-                        <span className="text-[13px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-ink)" }}>{fmt(it.amount)}</span>
+                        <span className="text-[13px] font-extrabold" style={{ fontVariantNumeric: "tabular-nums", color: "var(--tj-ink)" }}>
+                          <OwnAmount main={it.amount} alt={it.own ?? it.amount} altLabel="Tu parte" iconSize={11} />
+                        </span>
                       </div>
                     ))}
                   </div>

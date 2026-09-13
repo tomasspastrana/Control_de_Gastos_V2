@@ -141,6 +141,13 @@ redepliega automático. (Ver sección 8 y 9.)
 - Cada compra en cuotas compromete su parte **no pagada**: `deudaCompra = total × (cuotas − pagadas) / cuotas`.
 - Por tarjeta: `deuda = Σ deudas de sus compras`, `disponible = límite − deuda`, `% usado = deuda / límite`.
 - Todo se convierte a **ARS** usando los tipos de cambio del perfil.
+- **Compras compartidas / tarjeta prestada:** cada compra puede tener una persona (`sharedWith`) y
+  **mi porcentaje** (`myPct`, 0..100; sin persona es siempre 100). Conviven **dos totales**: el de la
+  tarjeta (ocupa el límite, es lo que cobra el banco, dispara las alertas) y **lo mío** (`ownDebt`,
+  `ownTotal`, `own` por línea de resumen). Los gastos fijos son siempre míos. En las vistas de deuda el
+  número principal es lo mío y el total va en hover/tap; en Resúmenes es al revés. Al pagar un resumen,
+  el snapshot congela `own` y `sharedWith` por ítem (`snapshotOwnTotal`); los snapshots anteriores a esta
+  feature no lo tienen y valen el total.
 
 ### Fechas de cierre (`closing.ts`) — el hallazgo
 Analizando los resúmenes encontramos **tres patrones**:

@@ -56,6 +56,10 @@ export const purchases = pgTable("purchases", {
   paidInstallments: integer("paid_installments").notNull().default(0),
   category: text("category").notNull().default("Otros"),
   date: date("date", { mode: "string" }).notNull(),
+  // shared / lent-card purchases: who else it belongs to (null = mine) and my share in percent.
+  // The full amount still occupies the limit and lands on the statement; only "what I owe" uses my_pct.
+  sharedWith: text("shared_with"),
+  myPct: integer("my_pct").notNull().default(100),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

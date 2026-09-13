@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import type { Card, FixedExpense, Purchase, Rates, StatementSnapshot } from "@/lib/types";
-import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseInstallment, rate } from "@/lib/calc";
+import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseInstallment, purchaseOwnRemaining, purchaseRemaining, rate } from "@/lib/calc";
 import { currentDueClosing, dueDate, fmtClosing, paymentAlert, ruleFromCard } from "@/lib/closing";
 import { purchaseNextClosing, statementPayState, type CardStatement } from "@/lib/statements";
 import { updateCardClosing } from "@/app/actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CreditCardVisual } from "./CreditCardVisual";
+import { OwnAmount } from "./OwnAmount";
+import { SharedBadge } from "./SharedBadge";
 import { ProgressBar } from "./ProgressBar";
 import { InstallmentDots } from "./InstallmentDots";
 import { PayControls } from "./PayControls";
@@ -110,7 +112,7 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
 
           <div className="tj-glass" style={{ padding: "18px 20px", borderRadius: 22 }}>
             <Row label="Límite" value={fmt(m.limit)} />
-            <Row label="Deuda" value={fmt(m.debt)} valueColor="var(--tj-debt)" />
+            <Row label={m.others.length ? "Tu deuda" : "Deuda"} value={<OwnAmount main={m.ownDebt} alt={m.debt} altLabel="Total de la tarjeta" others={m.others} />} valueColor="var(--tj-debt)" />
             <Row label="Disponible" value={fmt(m.avail)} valueColor="var(--tj-good)" mb={14} />
             <ProgressBar pct={m.pct} height={8} />
             <div className="mt-1.5 text-right text-[11px] font-semibold" style={{ color: "var(--tj-muted)" }}>
@@ -150,7 +152,8 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
                 {pending.map((p) => {
                   const tot = p.amount * rate(rates, p.currency);
                   const per = purchaseInstallment(p, rates);
-                  const rem = (tot * (p.installments - p.paidInstallments)) / p.installments;
+                  const rem = purchaseRemaining(p, rates);
+                  const ownRem = purchaseOwnRemaining(p, rates);
                   // bought after the card closed → its first cuota waits for a later statement
                   const pClosing = rule && curClosing ? purchaseNextClosing(rule, p, curClosing) : curClosing;
                   const deferred = !!(curClosing && pClosing && pClosing > curClosing);
@@ -168,7 +171,9 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
                       <div className="mb-3.5 flex items-start gap-[13px]">
                         <span style={{ width: 34, height: 34, borderRadius: 11, flex: "none", background: hexA(catColor(p.category), 0.16), display: "flex", alignItems: "center", justifyContent: "center" }} />
                         <div className="min-w-0 flex-1">
-                          <div className="text-[15px] font-extrabold tracking-tight">{p.merchant}</div>
+                          <div className="text-[15px] font-extrabold tracking-tight">
+                            {p.merchant} <SharedBadge purchase={p} />
+                          </div>
                           <div className="mt-px text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
                             {p.category} · {fmtDate(p.date)} · {fmtCur(per, "ARS")}/cuota
                           </div>
@@ -201,7 +206,10 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
 
                       <div className="flex flex-wrap items-center justify-between gap-2.5">
                         <div className="text-[11.5px] font-bold" style={{ color: "var(--tj-muted-2)" }}>
-                          {p.paidInstallments}/{p.installments} cuotas · <span className="font-semibold" style={{ color: "var(--tj-muted)" }}>resta {fmt(rem)}</span>
+                          {p.paidInstallments}/{p.installments} cuotas ·{" "}
+                          <span className="font-semibold" style={{ color: "var(--tj-muted)" }}>
+                            resta <OwnAmount main={ownRem} alt={rem} altLabel="Resta en total" others={p.sharedWith ? [{ name: p.sharedWith, amount: rem - ownRem }] : undefined} iconSize={11} />
+                          </span>
                         </div>
                         <PayControls
                           canPay={p.paidInstallments < p.installments && !deferred}
@@ -304,7 +312,7 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
   );
 }
 
-function Row({ label, value, valueColor, mb = 12 }: { label: string; value: string; valueColor?: string; mb?: number }) {
+function Row({ label, value, valueColor, mb = 12 }: { label: string; value: ReactNode; valueColor?: string; mb?: number }) {
   return (
     <div className="flex justify-between" style={{ marginBottom: mb }}>
       <span className="text-xs font-semibold" style={{ color: "var(--tj-muted)" }}>{label}</span>

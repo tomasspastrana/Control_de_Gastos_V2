@@ -95,7 +95,7 @@ export function Sidebar({ cards, purchases, rates, fixedExpenses, view, selected
               <span style={{ width: 12, height: 12, borderRadius: 4, flex: "none", background: `linear-gradient(135deg,${a},${b})` }} />
               <span style={{ flex: 1, textAlign: "left", minWidth: 0 }}>
                 <span style={{ display: "block", fontWeight: 700, fontSize: 12.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.nickname}</span>
-                <span style={{ display: "block", fontSize: 11, color: "var(--tj-muted)", fontWeight: 500 }}>{fmt(m.debt)}</span>
+                <span style={{ display: "block", fontSize: 11, color: "var(--tj-muted)", fontWeight: 500 }}>{fmt(m.ownDebt)}</span>
               </span>
             </button>
           );

@@ -3,6 +3,8 @@ import {
   cardMetrics,
   categoryBreakdown,
   fixedMonthly,
+  ownFraction,
+  purchaseOwnRemaining,
   purchaseRemaining,
   totals,
 } from "./calc";
@@ -32,6 +34,8 @@ const p = (over: Partial<Purchase>): Purchase => ({
   paidInstallments: 3,
   category: "Tecnología",
   date: "2026-01-01",
+  sharedWith: null,
+  myPct: 100,
   ...over,
 });
 
@@ -133,6 +137,60 @@ describe("totals", () => {
     const t = totals([card], [p({})], rates);
     expect(t.debt).toBe(750_000);
     expect(t.avail).toBe(250_000);
+  });
+});
+
+describe("compras compartidas (mi parte vs. total de la tarjeta)", () => {
+  // 3 compras ARS de 12.000 en 3 cuotas, ninguna pagada: restan 12.000 c/u
+  const mine = p({ id: "a", amount: 12_000, currency: "ARS", installments: 3, paidInstallments: 0 });
+  const half = p({ id: "b", amount: 12_000, currency: "ARS", installments: 3, paidInstallments: 0, sharedWith: "Suegro", myPct: 50 });
+  const lent = p({ id: "c", amount: 12_000, currency: "ARS", installments: 3, paidInstallments: 0, sharedWith: "Hermana", myPct: 0 });
+
+  it("ownFraction: sin persona es 1; con persona es el porcentaje", () => {
+    expect(ownFraction(mine)).toBe(1);
+    expect(ownFraction(half)).toBe(0.5);
+    expect(ownFraction(lent)).toBe(0);
+    expect(ownFraction({ sharedWith: null, myPct: 20 })).toBe(1); // sin persona el pct no cuenta
+  });
+
+  it("purchaseOwnRemaining es la fracción del restante", () => {
+    expect(purchaseRemaining(half, rates)).toBe(12_000);
+    expect(purchaseOwnRemaining(half, rates)).toBe(6_000);
+    expect(purchaseOwnRemaining(lent, rates)).toBe(0);
+  });
+
+  it("cardMetrics: la deuda de la tarjeta no cambia, ownDebt sí, y others dice quién debe cuánto", () => {
+    const m = cardMetrics(card, [mine, half, lent], rates);
+    expect(m.debt).toBe(36_000); // ocupa el límite entero
+    expect(m.avail).toBe(1_000_000 - 36_000);
+    expect(m.ownDebt).toBe(12_000 + 6_000);
+    expect(m.others).toEqual([
+      { name: "Hermana", amount: 12_000 },
+      { name: "Suegro", amount: 6_000 },
+    ]);
+  });
+
+  it("gastos fijos que ocupan límite son siempre míos", () => {
+    const fx: FixedExpense = { id: "f", cardId: "c1", name: "Sub", amount: 1_000, currency: "ARS", category: "Ocio", active: true, occupiesLimit: true };
+    const m = cardMetrics(card, [lent], rates, [fx]);
+    expect(m.debt).toBe(13_000);
+    expect(m.ownDebt).toBe(1_000);
+  });
+
+  it("totals junta a la misma persona entre tarjetas", () => {
+    const c2: Card = { ...card, id: "c2" };
+    const t = totals([card, c2], [half, { ...half, id: "d", cardId: "c2" }, lent], rates);
+    expect(t.debt).toBe(36_000);
+    expect(t.ownDebt).toBe(12_000);
+    expect(t.others).toEqual([
+      { name: "Hermana", amount: 12_000 },
+      { name: "Suegro", amount: 12_000 },
+    ]);
+  });
+
+  it("categoryBreakdown cuenta sólo mi parte", () => {
+    const b = categoryBreakdown([mine, half, lent], rates);
+    expect(b.total).toBe(12_000 + 6_000);
   });
 });
 

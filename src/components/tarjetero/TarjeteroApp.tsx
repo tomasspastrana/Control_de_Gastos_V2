@@ -195,7 +195,7 @@ export function TarjeteroApp({ data, userEmail }: { data: AppData; userEmail: st
       </AppShell>
 
       <NewCardModal open={modal === "card"} onClose={() => setModal(null)} onCreate={createCard} initialTheme={nextTheme} />
-      <NewPurchaseModal open={modal === "purchase"} onClose={() => setModal(null)} onCreate={createPurchase} onUpdate={updatePurchase} cards={optimistic.cards} rates={optimistic.rates} defaultCardId={defaultPurchaseCardId} initial={purchaseEdit} />
+      <NewPurchaseModal open={modal === "purchase"} onClose={() => setModal(null)} onCreate={createPurchase} onUpdate={updatePurchase} cards={optimistic.cards} purchases={optimistic.purchases} rates={optimistic.rates} defaultCardId={defaultPurchaseCardId} initial={purchaseEdit} />
       <SettingsModal open={modal === "settings"} onClose={() => setModal(null)} rates={optimistic.rates} onSave={saveRates} />
       <NewDebtModal open={modal === "debt"} onClose={() => setModal(null)} onCreate={createDebt} rates={optimistic.rates} />
       <FixedExpenseModal

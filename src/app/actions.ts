@@ -90,6 +90,8 @@ export async function createPurchase(input: unknown) {
     paidInstallments: d.paidInstallments,
     category: d.category,
     date: d.date,
+    sharedWith: d.sharedWith,
+    myPct: d.myPct,
   });
   done();
 }
@@ -108,6 +110,8 @@ export async function updatePurchase(id: string, input: unknown) {
       paidInstallments: d.paidInstallments,
       category: d.category,
       date: d.date,
+      sharedWith: d.sharedWith,
+      myPct: d.myPct,
     })
     .where(and(eq(purchases.id, id), eq(purchases.userId, userId)));
   done();

@@ -21,7 +21,7 @@
 
 import { config } from "dotenv";
 import postgres from "postgres";
-import { fmt, rate } from "../src/lib/calc";
+import { fmt, ownFraction, rate } from "../src/lib/calc";
 import { addDays, closingInMonth, dueDate, nextClosing, parseYmd, ruleFromCard, ymd } from "../src/lib/closing";
 import { periodKey } from "../src/lib/statements";
 import type { Currency, StatementSnapshotItem } from "../src/lib/types";
@@ -131,9 +131,9 @@ async function main() {
     }
 
     const purchases = await sql<
-      { id: string; merchant: string; amount: string; currency: Currency; installments: number; paid_installments: number }[]
+      { id: string; merchant: string; amount: string; currency: Currency; installments: number; paid_installments: number; shared_with: string | null; my_pct: number }[]
     >`
-      select id, merchant, amount, currency, installments, paid_installments
+      select id, merchant, amount, currency, installments, paid_installments, shared_with, my_pct
         from purchases
        where card_id = ${c.id}
          and paid_installments >= 1
@@ -150,20 +150,25 @@ async function main() {
     const rates = ratesFor(c.user_id);
     const items: StatementSnapshotItem[] = [];
     for (const p of purchases) {
+      const amount = (Number(p.amount) * rate(rates, p.currency)) / (p.installments || 1);
       items.push({
         label: p.merchant,
         // the installment this payment settled is the one it left as "paid"
         sub: `cuota ${p.paid_installments}/${p.installments}`,
-        amount: (Number(p.amount) * rate(rates, p.currency)) / (p.installments || 1),
+        amount,
+        own: amount * ownFraction({ sharedWith: p.shared_with, myPct: p.my_pct }),
         kind: "purchase",
         purchaseId: p.id,
+        ...(p.shared_with ? { sharedWith: p.shared_with } : {}),
       });
     }
     for (const f of fixed) {
+      const amount = Number(f.amount) * rate(rates, f.currency);
       items.push({
         label: f.name,
         sub: f.occupies_limit ? "gasto fijo" : "gasto fijo · no ocupa límite",
-        amount: Number(f.amount) * rate(rates, f.currency),
+        amount,
+        own: amount,
         kind: "fixed",
       });
     }

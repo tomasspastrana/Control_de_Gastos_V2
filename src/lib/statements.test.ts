@@ -6,6 +6,7 @@ import {
   currentStatement,
   generalStatement,
   purchaseNextClosing,
+  snapshotOwnTotal,
   statementPayState,
 } from "./statements";
 import { parseYmd, ruleFromCard, ymd } from "./closing";
@@ -22,7 +23,8 @@ const card: Card = {
 
 const p = (over: Partial<Purchase>): Purchase => ({
   id: "p", cardId: "c1", merchant: "m", amount: 30_000, currency: "ARS",
-  installments: 3, paidInstallments: 0, category: "Otros", date: "2026-06-10", ...over,
+  installments: 3, paidInstallments: 0, category: "Otros", date: "2026-06-10",
+  sharedWith: null, myPct: 100, ...over,
 });
 
 const hoy = parseYmd("2026-07-08"); // el 30-jun ya cerró y no se pagó → resumen que vence ahora (offset 0)
@@ -215,6 +217,47 @@ describe("buildPaidSnapshot", () => {
     // el purchaseId viaja en el jsonb para poder deshacer el pago exacto
     expect(snap.items[0].purchaseId).toBe("a");
     expect(snap.total).toBe(stmt.total);
+  });
+});
+
+describe("compras compartidas en los resúmenes", () => {
+  // cuota 10.000 mía + cuota 10.000 al 50 % con el suegro + cuota 10.000 prestada a la hermana
+  const purchases = [
+    p({ id: "a" }),
+    p({ id: "b", sharedWith: "Suegro", myPct: 50 }),
+    p({ id: "c", sharedWith: "Hermana", myPct: 0 }),
+  ];
+  const fx: FixedExpense = { id: "f", cardId: "c1", name: "Mant.", amount: 2_000, currency: "ARS", category: "Otros", active: true, occupiesLimit: false };
+
+  it("cada línea lleva su parte propia; el total del resumen es el del banco", () => {
+    const jun = cardStatement(card, purchases, [fx], rates, 2026, 5, hoy);
+    expect(jun.total).toBe(32_000);
+    expect(jun.ownTotal).toBe(10_000 + 5_000 + 0 + 2_000);
+    const b = jun.items.find((i) => i.purchaseId === "b")!;
+    expect(b).toMatchObject({ amount: 10_000, own: 5_000, sharedWith: "Suegro" });
+    expect(jun.items.find((i) => i.purchaseId === "a")!.sharedWith).toBeUndefined();
+    expect(generalStatement([card], purchases, [fx], rates, 2026, 5, hoy)).toMatchObject({ total: 32_000, ownTotal: 17_000 });
+  });
+
+  it("el snapshot congela la parte propia y la persona; los viejos sin `own` valen el total", () => {
+    const stmt = cardStatement(card, purchases, [], rates, 2026, 5, hoy);
+    const snap = buildPaidSnapshot(card, stmt, parseYmd("2026-06-30"), "2026-07-08");
+    expect(snap.items.find((i) => i.purchaseId === "c")).toMatchObject({ own: 0, sharedWith: "Hermana" });
+    expect(snapshotOwnTotal(snap)).toBe(15_000);
+    const old: Pick<StatementSnapshot, "items" | "total"> = {
+      total: 30_000,
+      items: [{ label: "x", sub: "cuota 1/3", amount: 30_000, kind: "purchase" }],
+    };
+    expect(snapshotOwnTotal(old)).toBe(30_000);
+    expect(snapshotOwnTotal({ total: 5, items: [] })).toBe(5);
+  });
+
+  it("amountDueThisMonth separa lo que cobra el banco de lo que debo", () => {
+    const r = amountDueThisMonth([card], purchases, [], [], rates, hoy);
+    expect(r.cards).toBe(30_000);
+    expect(r.ownCards).toBe(15_000);
+    expect(r.total).toBe(30_000);
+    expect(r.ownTotal).toBe(15_000);
   });
 });
 

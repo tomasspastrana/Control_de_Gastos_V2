@@ -45,3 +45,18 @@ describe("purchaseSchema amount", () => {
     expect(purchaseSchema.safeParse({ ...base, amount: "0" }).success).toBe(false);
   });
 });
+
+describe("purchaseSchema shared purchases", () => {
+  const base = { cardId: "c1", merchant: "m", amount: "1000", currency: "ARS", installments: "3", paidInstallments: "0", category: "Otros", date: "2026-01-01" };
+  it("sin persona es mía al 100 %, aunque venga otro porcentaje", () => {
+    const r = purchaseSchema.parse({ ...base, sharedWith: "  ", myPct: "40" });
+    expect(r.sharedWith).toBeNull();
+    expect(r.myPct).toBe(100);
+    expect(purchaseSchema.parse(base).myPct).toBe(100); // campos ausentes (compras viejas)
+  });
+  it("con persona conserva el porcentaje, recortado a 0..100 y con fallback a 100", () => {
+    expect(purchaseSchema.parse({ ...base, sharedWith: " Suegro ", myPct: "50" })).toMatchObject({ sharedWith: "Suegro", myPct: 50 });
+    expect(purchaseSchema.parse({ ...base, sharedWith: "Hermana", myPct: "0" }).myPct).toBe(0);
+    expect(purchaseSchema.parse({ ...base, sharedWith: "Hermana", myPct: "abc" }).myPct).toBe(100);
+  });
+});

@@ -17,6 +17,8 @@ interface Props {
   onCreate: (purchase: Purchase) => void;
   onUpdate: (id: string, purchase: Purchase) => void;
   cards: Card[];
+  /** all purchases — only used to suggest people already used on shared purchases */
+  purchases?: Purchase[];
   rates: Rates;
   defaultCardId: string;
   /** Present = edit mode (prefills the form). */
@@ -32,6 +34,9 @@ const emptyForm = (cardId: string) => ({
   paidInstallments: "0",
   category: "Tecnología" as string,
   date: new Date().toISOString().slice(0, 10),
+  shared: false, // someone else is on this purchase (shared / lent card)
+  sharedWith: "",
+  myPct: "100",
 });
 
 type Form = ReturnType<typeof emptyForm>;
@@ -45,9 +50,14 @@ const formFrom = (p: Purchase): Form => ({
   paidInstallments: String(p.paidInstallments),
   category: p.category,
   date: p.date,
+  shared: !!p.sharedWith,
+  sharedWith: p.sharedWith ?? "",
+  myPct: String(p.sharedWith ? p.myPct : 100),
 });
 
-export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, rates, defaultCardId, initial }: Props) {
+const PCT_CHIPS = [0, 25, 50, 75];
+
+export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, purchases = [], rates, defaultCardId, initial }: Props) {
   const [f, setF] = useState<Form>(emptyForm(defaultCardId));
 
   useEffect(() => {
@@ -57,9 +67,19 @@ export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, rat
   const set = <K extends keyof Form>(k: K, v: Form[K]) =>
     setF((prev) => ({ ...prev, [k]: v }));
 
-  const preview = fmt(toAmount(f.amount) * rate(rates, f.currency));
+  const totalArs = toAmount(f.amount) * rate(rates, f.currency);
+  const preview = fmt(totalArs);
   const hasCards = cards.length > 0;
   const isEdit = !!initial;
+
+  // shared purchase: people already used, and the split preview
+  const knownPeople = Array.from(new Set(purchases.map((p) => p.sharedWith).filter((s): s is string => !!s))).sort();
+  const myPct = Math.min(100, Math.max(0, parseInt(f.myPct || "0", 10) || 0));
+  const personLabel = f.sharedWith.trim() || "la otra persona";
+  function toggleShared() {
+    // turning it on defaults to "not mine at all" (the lent-card case); turning it off resets to mine
+    setF((prev) => (prev.shared ? { ...prev, shared: false, sharedWith: "", myPct: "100" } : { ...prev, shared: true, myPct: "0" }));
+  }
 
   // simulator: where the next unpaid cuota actually lands — the statement due now, unless the
   // date entered is after it closed, in which case it waits for the following one.
@@ -76,7 +96,12 @@ export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, rat
   const simDue = simClosing && simCard?.dueDays != null ? dueDate(simClosing, simCard.dueDays) : null;
 
   function submit() {
-    const parsed = purchaseSchema.safeParse(f);
+    if (f.shared && !f.sharedWith.trim()) {
+      toast.error("Poné con quién compartís la compra");
+      return;
+    }
+    // the schema normalizes: no sharedWith → mine, 100 %
+    const parsed = purchaseSchema.safeParse({ ...f, sharedWith: f.shared ? f.sharedWith : "" });
     if (!parsed.success) {
       toast.error(parsed.error.issues[0]?.message ?? "Datos inválidos");
       return;
@@ -92,6 +117,8 @@ export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, rat
       paidInstallments: d.paidInstallments,
       category: d.category,
       date: d.date,
+      sharedWith: d.sharedWith,
+      myPct: d.myPct,
     };
     if (isEdit) {
       onUpdate(purchase.id, purchase);
@@ -165,6 +192,61 @@ export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, rat
                 <input type="date" className="tj-input" value={f.date} onChange={(e) => set("date", e.target.value)} />
               </div>
             </div>
+
+            {/* whose purchase is it: shared card / lent card → only my share counts as my debt */}
+            <button
+              type="button"
+              onClick={toggleShared}
+              className="mb-2 flex w-full cursor-pointer flex-col items-start gap-0.5 rounded-[13px] px-[13px] py-[11px] text-[13px] font-bold"
+              style={{ border: "1px solid rgba(120,110,180,.22)", background: "rgba(255,255,255,.6)" }}
+            >
+              <div className="flex w-full items-center justify-between">
+                <span>¿De quién es la compra?</span>
+                <span style={{ color: f.shared ? "var(--tj-accent)" : "var(--tj-good)" }}>{f.shared ? "Compartida / de otro" : "Mía"}</span>
+              </div>
+              <span className="text-left" style={{ fontSize: 11, fontWeight: 600, color: "var(--tj-muted)" }}>
+                {f.shared
+                  ? "Ocupa el límite y viene en el resumen igual, pero en tu deuda cuenta sólo tu parte."
+                  : "Tocá si compartís la tarjeta o se la prestaste a alguien."}
+              </span>
+            </button>
+            {f.shared && (
+              <div className="mb-2 rounded-[12px] px-3.5 py-2.5" style={{ background: "rgba(109,94,246,.06)", border: "1px solid rgba(109,94,246,.16)" }}>
+                <div className="flex gap-3">
+                  <div className="tj-field flex-1">
+                    <label className="tj-label">Persona</label>
+                    <input className="tj-input" list="tj-shared-people" value={f.sharedWith} onChange={(e) => set("sharedWith", e.target.value)} placeholder="Ej: Suegro" />
+                    <datalist id="tj-shared-people">
+                      {knownPeople.map((n) => <option key={n} value={n} />)}
+                    </datalist>
+                  </div>
+                  <div className="tj-field" style={{ flex: 0.7 }}>
+                    <label className="tj-label">Mi parte (%)</label>
+                    <input className="tj-input" value={f.myPct} inputMode="numeric" onChange={(e) => set("myPct", e.target.value.replace(/\D/g, "").slice(0, 3))} />
+                  </div>
+                </div>
+                <div className="-mt-1 flex flex-wrap items-center gap-1.5">
+                  {PCT_CHIPS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => set("myPct", String(n))}
+                      className="cursor-pointer rounded-full px-2.5 py-1 text-[11.5px] font-bold"
+                      style={{
+                        border: myPct === n ? "1.5px solid var(--tj-accent)" : "1px solid rgba(120,110,180,.22)",
+                        background: myPct === n ? "rgba(109,94,246,.12)" : "rgba(255,255,255,.7)",
+                        color: myPct === n ? "var(--tj-accent)" : "var(--tj-muted-2)",
+                      }}
+                    >
+                      {n === 0 ? "Nada mío" : `${n} % mío`}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 text-[11.5px] font-bold" style={{ color: "var(--tj-accent)" }}>
+                  Vos: {fmt(totalArs * (myPct / 100))} · {personLabel}: {fmt(totalArs * (1 - myPct / 100))}
+                </div>
+              </div>
+            )}
 
             {/* simulator: which statement the next cuota lands in, given the date entered */}
             {simCard && (

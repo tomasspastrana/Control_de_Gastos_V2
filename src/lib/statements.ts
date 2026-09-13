@@ -7,7 +7,7 @@
 // Recurring fixed expenses appear in every statement.
 
 import type { Card, Debt, FixedExpense, Purchase, Rates, StatementSnapshot } from "./types";
-import { debtsMonthly, fixedMonthly, purchaseInstallment, rate } from "./calc";
+import { debtsMonthly, fixedMonthly, purchaseInstallment, purchaseOwnInstallment, rate } from "./calc";
 import {
   addDays,
   closingSpan,
@@ -26,9 +26,11 @@ import {
 export interface StatementItem {
   label: string;
   sub: string;
-  amount: number; // ARS
+  amount: number; // ARS — what the bank bills for this line
+  own: number; // ARS — my part of `amount` (shared purchases: my share; everything else: all of it)
   kind: "purchase" | "fixed";
   purchaseId?: string; // set for purchase items → the installment "Pagar tarjeta" advances
+  sharedWith?: string; // set when someone else is on this purchase
 }
 
 export interface CardStatement {
@@ -37,7 +39,33 @@ export interface CardStatement {
   closing: Date | null; // null = this card has no statement in the month
   due: Date | null;
   items: StatementItem[];
-  total: number;
+  total: number; // what the bank bills
+  ownTotal: number; // what I actually owe of it
+}
+
+function purchaseItem(p: Purchase, cuota: number, rates: Rates): StatementItem {
+  return {
+    label: p.merchant,
+    sub: `cuota ${cuota}/${p.installments}`,
+    amount: purchaseInstallment(p, rates),
+    own: purchaseOwnInstallment(p, rates),
+    kind: "purchase",
+    purchaseId: p.id,
+    ...(p.sharedWith ? { sharedWith: p.sharedWith } : {}),
+  };
+}
+
+function sumItems(items: StatementItem[]): { total: number; ownTotal: number } {
+  return {
+    total: items.reduce((s, i) => s + i.amount, 0),
+    ownTotal: items.reduce((s, i) => s + i.own, 0),
+  };
+}
+
+/** My part of a saved statement. Snapshots from before shared purchases have no `own` → the full line. */
+export function snapshotOwnTotal(s: Pick<StatementSnapshot, "items" | "total">): number {
+  if (!s.items.length) return s.total;
+  return s.items.reduce((sum, i) => sum + (i.own ?? i.amount), 0);
 }
 
 /** First closing that can bill this purchase — the first one on/after the day it was made. */
@@ -65,6 +93,7 @@ function fixedItem(f: FixedExpense, rates: Rates): StatementItem {
     label: f.name,
     sub: f.occupiesLimit ? "gasto fijo" : "gasto fijo · no ocupa límite",
     amount: f.amount * rate(rates, f.currency),
+    own: f.amount * rate(rates, f.currency), // fixed expenses are always mine
     kind: "fixed",
   };
 }
@@ -86,12 +115,12 @@ export function cardStatement(
 ): CardStatement {
   const rule = ruleFromCard(card);
   const base = { cardId: card.id, nickname: card.nickname };
-  if (!rule) return { ...base, closing: null, due: null, items: [], total: 0 };
+  if (!rule) return { ...base, closing: null, due: null, items: [], total: 0, ownTotal: 0 };
 
   // anchor offset 0 on the resumen actually due now (may have closed earlier this month)
   const start = currentDueClosing(rule, from, card.lastPaymentAt ?? null, card.createdAt ?? null);
   const found = forwardClosingInMonth(rule, year, month, from, start);
-  if (!found) return { ...base, closing: null, due: null, items: [], total: 0 };
+  if (!found) return { ...base, closing: null, due: null, items: [], total: 0, ownTotal: 0 };
   const { closing, offset } = found;
 
   const items: StatementItem[] = [];
@@ -102,14 +131,7 @@ export function cardStatement(
     // anchor; `min` keeps the paid-installments anchor winning for everything older
     const pOffset = Math.min(offset, closingSpan(firstClosingOf(rule, p), closing));
     if (pOffset >= 0 && pOffset < remaining) {
-      const cuota = p.paidInstallments + 1 + pOffset;
-      items.push({
-        label: p.merchant,
-        sub: `cuota ${cuota}/${p.installments}`,
-        amount: purchaseInstallment(p, rates),
-        kind: "purchase",
-        purchaseId: p.id,
-      });
+      items.push(purchaseItem(p, p.paidInstallments + 1 + pOffset, rates));
     }
   }
 
@@ -118,9 +140,8 @@ export function cardStatement(
     if (f.cardId === card.id && f.active) items.push(fixedItem(f, rates));
   }
 
-  const total = items.reduce((s, i) => s + i.amount, 0);
   const due = card.dueDays != null ? dueDate(closing, card.dueDays) : null;
-  return { ...base, closing, due, items, total };
+  return { ...base, closing, due, items, ...sumItems(items) };
 }
 
 /**
@@ -144,21 +165,14 @@ export function statementAt(
     // bought after this statement closed → it lands in a later one (this is `cardStatement`'s
     // rule at offset 0, where the only thing `min` can do is defer)
     if (rule && closing && closingSpan(firstClosingOf(rule, p), closing) < 0) continue;
-    items.push({
-      label: p.merchant,
-      sub: `cuota ${p.paidInstallments + 1}/${p.installments}`,
-      amount: purchaseInstallment(p, rates),
-      kind: "purchase",
-      purchaseId: p.id,
-    });
+    items.push(purchaseItem(p, p.paidInstallments + 1, rates));
   }
   for (const f of fixed) {
     if (f.cardId === card.id && f.active) items.push(fixedItem(f, rates));
   }
 
-  const total = items.reduce((s, i) => s + i.amount, 0);
   const due = closing && card.dueDays != null ? dueDate(closing, card.dueDays) : null;
-  return { cardId: card.id, nickname: card.nickname, closing, due, items, total };
+  return { cardId: card.id, nickname: card.nickname, closing, due, items, ...sumItems(items) };
 }
 
 /**
@@ -180,6 +194,7 @@ export function currentStatement(
 
 export interface GeneralStatement {
   total: number;
+  ownTotal: number;
   perCard: CardStatement[]; // only cards with something billed in the month
 }
 
@@ -197,14 +212,17 @@ export function generalStatement(
     .map((c) => cardStatement(c, purchases, fixed, rates, year, month, from))
     .filter((s) => s.items.length > 0);
   const total = perCard.reduce((s, c) => s + c.total, 0);
-  return { total, perCard };
+  const ownTotal = perCard.reduce((s, c) => s + c.ownTotal, 0);
+  return { total, ownTotal, perCard };
 }
 
 export interface AmountDue {
   cards: number; // sum of every card's current statement (cuota + fixed charged to the card)
+  ownCards: number; // my part of `cards`
   debts: number; // one installment per unpaid personal debt
   fixed: number; // standalone fixed expenses (not charged to any card)
   total: number;
+  ownTotal: number; // what I actually owe (debts and fixed are always mine)
 }
 
 /**
@@ -221,14 +239,24 @@ export function amountDueThisMonth(
   rates: Rates,
   from: Date = new Date(),
 ): AmountDue {
-  const cardsTotal = cards.reduce(
-    (s, c) => s + currentStatement(c, purchases, fixed, rates, from).total,
-    0,
-  );
+  let cardsTotal = 0;
+  let ownCards = 0;
+  for (const c of cards) {
+    const st = currentStatement(c, purchases, fixed, rates, from);
+    cardsTotal += st.total;
+    ownCards += st.ownTotal;
+  }
   const debtsTotal = debtsMonthly(debts, rates);
   const standaloneFixed = fixed.filter((f) => f.cardId === null && f.active);
   const fixedTotal = fixedMonthly(standaloneFixed, rates);
-  return { cards: cardsTotal, debts: debtsTotal, fixed: fixedTotal, total: cardsTotal + debtsTotal + fixedTotal };
+  return {
+    cards: cardsTotal,
+    ownCards,
+    debts: debtsTotal,
+    fixed: fixedTotal,
+    total: cardsTotal + debtsTotal + fixedTotal,
+    ownTotal: ownCards + debtsTotal + fixedTotal,
+  };
 }
 
 /** yyyy-mm-01 label for a 0-based (year, month) — the period key of a snapshot. */
@@ -300,8 +328,10 @@ export function buildPaidSnapshot(
       label: i.label,
       sub: i.sub,
       amount: i.amount,
+      own: i.own,
       kind: i.kind,
       ...(i.purchaseId ? { purchaseId: i.purchaseId } : {}),
+      ...(i.sharedWith ? { sharedWith: i.sharedWith } : {}),
     })),
     paidAt,
   };

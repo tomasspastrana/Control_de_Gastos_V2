@@ -1,7 +1,7 @@
 "use client";
 
 import type { Purchase, Rates } from "@/lib/types";
-import { catColor, fmt, fmtCur, fmtDate, hexA, rate } from "@/lib/calc";
+import { catColor, fmt, fmtCur, fmtDate, hexA, ownFraction, rate } from "@/lib/calc";
 
 interface Props {
   purchases: Purchase[]; // already filtered to fully-paid ones
@@ -18,7 +18,8 @@ interface Props {
  */
 export function SettledPurchases({ purchases, rates, onUnpay, onEdit, onDelete }: Props) {
   if (purchases.length === 0) return null;
-  const total = purchases.reduce((s, p) => s + p.amount * rate(rates, p.currency), 0);
+  // my share only — a settled purchase someone else was on is not "my" spend
+  const total = purchases.reduce((s, p) => s + p.amount * rate(rates, p.currency) * ownFraction(p), 0);
 
   return (
     <details className="tj-settled mt-3.5">

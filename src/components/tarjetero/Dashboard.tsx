@@ -20,6 +20,8 @@ import { StatTile } from "./StatTile";
 import { ProgressBar } from "./ProgressBar";
 import { DonutChart } from "./DonutChart";
 import { ClosingInfo } from "./ClosingInfo";
+import { OwnAmount } from "./OwnAmount";
+import { SharedBadge } from "./SharedBadge";
 
 interface Props {
   data: AppData;
@@ -40,7 +42,9 @@ function DashCard({ card, data, onOpen, onDelete }: { card: Card; data: AppData;
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px 4px" }}>
         <div>
           <div style={{ fontSize: 11, color: "var(--tj-muted)", fontWeight: 600 }}>Deuda</div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: "var(--tj-debt)", fontVariantNumeric: "tabular-nums" }}>{fmt(m.debt)}</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "var(--tj-debt)", fontVariantNumeric: "tabular-nums" }}>
+            <OwnAmount main={m.ownDebt} alt={m.debt} altLabel="Total de la tarjeta" others={m.others} />
+          </div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 11, color: "var(--tj-muted)", fontWeight: 600 }}>Disponible</div>
@@ -64,7 +68,7 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard,
   const breakdown = categoryBreakdown(data.purchases, data.rates);
   const fixedTotal = fixedMonthly(data.fixedExpenses, data.rates);
   // "A pagar este mes" = everything due now: cards' current statements + personal debts + standalone fixed
-  const monthlyDue = amountDueThisMonth(data.cards, data.purchases, data.fixedExpenses, data.debts, data.rates).total;
+  const monthlyDue = amountDueThisMonth(data.cards, data.purchases, data.fixedExpenses, data.debts, data.rates);
 
   const cardName = (id: string) => data.cards.find((c) => c.id === id)?.nickname ?? "—";
   const recent = [...data.purchases]
@@ -80,8 +84,10 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard,
           <h1 style={{ margin: "2px 0 0", fontSize: "clamp(22px, 6vw, 30px)", fontWeight: 800, letterSpacing: "-.03em", overflowWrap: "anywhere" }}>Hola, {userName || "qué tal"} 👋</h1>
         </div>
         <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 11.5, color: "var(--tj-muted)", fontWeight: 600 }}>Deuda total (ARS)</div>
-          <div style={{ fontSize: "clamp(24px, 7vw, 30px)", fontWeight: 800, letterSpacing: "-.02em", color: "var(--tj-debt)", fontVariantNumeric: "tabular-nums" }}>{fmt(t.debt)}</div>
+          <div style={{ fontSize: 11.5, color: "var(--tj-muted)", fontWeight: 600 }}>{t.others.length ? "Tu deuda (ARS)" : "Deuda total (ARS)"}</div>
+          <div style={{ fontSize: "clamp(24px, 7vw, 30px)", fontWeight: 800, letterSpacing: "-.02em", color: "var(--tj-debt)", fontVariantNumeric: "tabular-nums" }}>
+            <OwnAmount main={t.ownDebt} alt={t.debt} altLabel="Total en tarjetas" others={t.others} iconSize={18} />
+          </div>
         </div>
       </div>
 
@@ -90,7 +96,11 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard,
 
       {/* stat strip */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 16, marginBottom: 28 }}>
-        <StatTile label="A pagar este mes · tarjetas + deudas + fijos" value={fmt(monthlyDue)} valueColor="var(--tj-debt)" />
+        <StatTile
+          label="A pagar este mes · tarjetas + deudas + fijos"
+          value={<OwnAmount main={monthlyDue.total} alt={monthlyDue.ownTotal} altLabel="Lo que debés vos" />}
+          valueColor="var(--tj-debt)"
+        />
         <StatTile label="Límite total" value={fmt(t.limit)} />
         <StatTile label="Disponible total" value={fmt(t.avail)} valueColor="var(--tj-good)" />
         {fixedTotal > 0.5 ? (
@@ -151,7 +161,9 @@ export function Dashboard({ data, userName, onAddCard, onOpenCard, onDeleteCard,
                 <div key={r.id} className="tj-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 6px" }}>
                   <span style={{ width: 10, height: 10, borderRadius: 3, flex: "none", background: catColor(r.category) }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.merchant}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {r.merchant} <SharedBadge purchase={r} />
+                    </div>
                     <div style={{ fontSize: 11, color: "var(--tj-muted)", fontWeight: 600 }}>{cardName(r.cardId)} · {fmtDate(r.date)}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>

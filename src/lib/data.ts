@@ -43,6 +43,8 @@ function toPurchase(r: PurchaseRow): Purchase {
     paidInstallments: r.paidInstallments,
     category: r.category,
     date: r.date,
+    sharedWith: r.sharedWith,
+    myPct: r.myPct,
   };
 }
 

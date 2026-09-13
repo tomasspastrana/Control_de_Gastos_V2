@@ -81,10 +81,15 @@ export const purchaseSchema = z
     paidInstallments: z.coerce.number().int().min(0).catch(0),
     category: z.string().min(1),
     date: z.string().min(1),
+    sharedWith: z.string().trim().max(40).nullish(),
+    myPct: z.coerce.number().int().min(0).max(100).catch(100),
   })
   .transform((v) => ({
     ...v,
     paidInstallments: Math.min(v.paidInstallments, v.installments),
+    // a purchase is either mine (100 %) or shared with a named person
+    sharedWith: v.sharedWith || null,
+    myPct: v.sharedWith ? v.myPct : 100,
   }));
 export type PurchaseInput = z.input<typeof purchaseSchema>;
 
