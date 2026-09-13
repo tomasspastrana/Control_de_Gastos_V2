@@ -68,7 +68,7 @@ export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, rat
   const simInst = Math.max(1, parseInt(f.installments || "1", 10) || 1);
   const simPaid = Math.min(Math.max(0, parseInt(f.paidInstallments || "0", 10) || 0), simInst);
   const simFullyPaid = simPaid >= simInst;
-  const simAnchor = simRule ? currentDueClosing(simRule, new Date(), simCard?.lastPaymentAt ?? null) : null;
+  const simAnchor = simRule ? currentDueClosing(simRule, new Date(), simCard?.lastPaymentAt ?? null, simCard?.createdAt ?? null) : null;
   const simDateOk = /^\d{4}-\d{2}-\d{2}$/.test(f.date); // the date input is empty mid-edit
   const simClosing =
     simRule && simAnchor ? (simDateOk ? purchaseNextClosing(simRule, { date: f.date }, simAnchor) : simAnchor) : null;

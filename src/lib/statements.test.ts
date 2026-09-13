@@ -192,6 +192,16 @@ describe("statementPayState (un resumen se paga una sola vez, y recién cuando c
     const stamped: Card = { ...card, lastPaymentAt: "2026-07-02" };
     expect(statementPayState(stamped, purchases, [], rates, [], hoy).kind).toBe("payable");
   });
+
+  it("tarjeta dada de alta después del último cierre: todavía no tiene resumen que pagar", () => {
+    const nueva: Card = { ...card, createdAt: "2026-07-05" }; // el 30-jun cerró antes del alta
+    const st = statementPayState(nueva, purchases, [], rates, [], hoy);
+    expect(st.kind).toBe("not-closed");
+    if (st.kind !== "not-closed") return;
+    expect(ymd(st.nextClosing)).toBe("2026-07-30");
+    // alta el mismo día del cierre → ese resumen sí es pagable
+    expect(statementPayState({ ...card, createdAt: "2026-06-30" }, purchases, [], rates, [], hoy).kind).toBe("payable");
+  });
 });
 
 describe("buildPaidSnapshot", () => {

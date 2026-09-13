@@ -47,10 +47,10 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
   const cardFixed = fixedExpenses.filter((f) => f.cardId === card.id);
 
   const rule = ruleFromCard(card);
-  const alert = rule ? paymentAlert(rule, card.dueDays ?? null, m.debt > 0.5, card.lastPaymentAt ?? null) : null;
+  const alert = rule ? paymentAlert(rule, card.dueDays ?? null, m.debt > 0.5, card.lastPaymentAt ?? null, new Date(), 5, card.createdAt ?? null) : null;
   // the statement due now (the resumen awaiting payment) — the anchor each purchase is placed
   // against; one bought after it closed lands in a later statement (see purchaseNextClosing)
-  const curClosing = rule ? currentDueClosing(rule, new Date(), card.lastPaymentAt ?? null) : null;
+  const curClosing = rule ? currentDueClosing(rule, new Date(), card.lastPaymentAt ?? null, card.createdAt ?? null) : null;
   // can this card's statement be paid right now? (closed, and not already in history)
   const payState = statementPayState(card, purchases, fixedExpenses, rates, snapshots);
 

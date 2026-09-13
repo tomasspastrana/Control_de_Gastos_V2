@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { cards as cardsT, debts as debtsT, fixedExpenses as fixedT, profiles as profilesT, purchases as purchasesT, statementSnapshots as snapshotsT } from "@/db/schema";
 import type { AppData, Card, Debt, FixedExpense, Purchase, StatementSnapshot } from "@/lib/types";
 import type { CardRow, DebtRow, FixedExpenseRow, PurchaseRow, StatementSnapshotRow } from "@/db/schema";
+import { ymd } from "@/lib/closing";
 
 function toCard(r: CardRow): Card {
   return {
@@ -27,6 +28,7 @@ function toCard(r: CardRow): Card {
     closingWeekday: r.closingWeekday,
     dueDays: r.dueDays,
     lastPaymentAt: r.lastPaymentAt,
+    createdAt: ymd(r.createdAt),
   };
 }
 

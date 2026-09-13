@@ -29,7 +29,9 @@ export const BANKS: Bank[] = [
   { id: "patagonia", name: "Banco Patagonia", confirmed: true, preset: { ruleType: "weekday_cycle", dueDays: 10 } },
   { id: "uala", name: "Ualá", confirmed: true, preset: { ruleType: "fixed_day", day: 30, businessAdjust: true, dueDays: 8 } },
   { id: "sucredito", name: "Sucrédito", confirmed: true, preset: { ruleType: "fixed_day", day: 23, businessAdjust: false, dueDays: 9 } },
-  // first Thursday from the 6th (07/05, 11/06, 08/07 holiday-adjusted, 06/08, 10/09 2026); due = Friday of the next week
+  // Always a Thursday, holiday-adjusted. The window and due offset are per account: one card closes
+  // the first Thursday from the 6th and is due 8 days later (07/05→15/05, 11/06→19/06, 08/07→17/07);
+  // another closes the first Thursday from the 20th and is due 13 days later (24/09→07/10).
   { id: "cencopay", name: "Cencopay (Cencosud)", confirmed: true, preset: { ruleType: "weekday_from", weekday: 4, day: 6, businessAdjust: true, dueDays: 8 } },
   // --- generic defaults (fixed day, user confirms) ---
   { id: "galicia", name: "Banco Galicia", preset: { ruleType: "fixed_day", businessAdjust: true, dueDays: 10 } },

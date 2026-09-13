@@ -9,6 +9,7 @@ import { cardSchema } from "@/lib/schemas";
 import { uid } from "@/lib/id";
 import { themeColors } from "@/lib/calc";
 import { BANKS, bankById } from "@/lib/banks";
+import { ymd } from "@/lib/closing";
 import { CURRENCIES, THEMES, type Card, type ThemeName } from "@/lib/types";
 
 interface Props {
@@ -76,6 +77,7 @@ export function NewCardModal({ open, onClose, onCreate, initialTheme }: Props) {
       expiry: d.expiry || "--/--",
       theme: d.theme,
       issuer: issuer || null,
+      createdAt: ymd(new Date()), // optimistic; the server stamps its own created_at
       ...buildClosingPayload(closing),
     };
     onCreate(card);

@@ -11,6 +11,7 @@ import {
   nextClosing,
   parseYmd,
   paymentAlert,
+  pendingClosing,
   purchaseStatement,
   ruleFromCard,
   upcomingClosings,
@@ -107,6 +108,19 @@ describe("weekday_from (Cencopay) — primer jueves a partir del día 6", () => 
     const late: ClosingRule = { type: "weekday_from", weekday: 4, fromDay: 28, businessAdjust: false };
     // feb-2027: 28 es domingo → el jueves siguiente sería el 4-mar → se retrocede al 25-feb
     expect(ymd(closingInMonth(late, 2027, 1)!)).toBe("2027-02-25");
+  });
+  it("tarjeta nueva: un cierre anterior al alta no es un resumen pendiente", () => {
+    // segunda Cencopay: jueves a partir del 20 (24/09), dada de alta el 13/09 sin pagos
+    const cenco2: ClosingRule = { type: "weekday_from", weekday: 4, fromDay: 20, businessAdjust: true };
+    const today = parseYmd("2026-09-13");
+    expect(ymd(lastClosingOnOrBefore(cenco2, today)!)).toBe("2026-08-20"); // existe, pero…
+    expect(pendingClosing(cenco2, today, null, "2026-09-13")).toBeNull();
+    expect(ymd(currentDueClosing(cenco2, today, null, "2026-09-13"))).toBe("2026-09-24");
+    expect(paymentAlert(cenco2, 13, true, null, today, 5, "2026-09-13")).toBeNull();
+    // sin fecha de alta se mantiene el comportamiento anterior (el de agosto queda pendiente)
+    expect(ymd(currentDueClosing(cenco2, today, null))).toBe("2026-08-20");
+    // alta el mismo día del cierre → ese resumen sí es nuestro
+    expect(ymd(pendingClosing(cenco2, today, null, "2026-08-20")!)).toBe("2026-08-20");
   });
   it("ruleFromCard arma la regla desde las columnas (y no sin el día de semana)", () => {
     const cols = { closingRuleType: "weekday_from", closingDay: 6, closingBusinessAdjust: true, closingWeekday: 4 };

@@ -89,7 +89,7 @@ export function cardStatement(
   if (!rule) return { ...base, closing: null, due: null, items: [], total: 0 };
 
   // anchor offset 0 on the resumen actually due now (may have closed earlier this month)
-  const start = currentDueClosing(rule, from, card.lastPaymentAt ?? null);
+  const start = currentDueClosing(rule, from, card.lastPaymentAt ?? null, card.createdAt ?? null);
   const found = forwardClosingInMonth(rule, year, month, from, start);
   if (!found) return { ...base, closing: null, due: null, items: [], total: 0 };
   const { closing, offset } = found;
@@ -174,7 +174,7 @@ export function currentStatement(
   from: Date = new Date(),
 ): CardStatement {
   const rule = ruleFromCard(card);
-  const closing = rule ? currentDueClosing(rule, from, card.lastPaymentAt ?? null) : null;
+  const closing = rule ? currentDueClosing(rule, from, card.lastPaymentAt ?? null, card.createdAt ?? null) : null;
   return statementAt(card, purchases, fixed, rates, closing);
 }
 
@@ -241,7 +241,7 @@ export function periodKey(year: number, month: number): string {
  * it has closed, and only once: the saved snapshot for its period IS the "already paid" record,
  * so this never depends on `lastPaymentAt` (which says when, not what).
  *  - `no-rule`     → no billing cycle configured, nothing to pay against
- *  - `not-closed`  → the cycle has no closing behind us yet (brand-new anchor)
+ *  - `not-closed`  → no closing behind us since the card was added (brand-new card)
  *  - `payable`     → the last closing's statement has no snapshot → pay it
  *  - `paid`        → it's already in history; the next one opens at `nextClosing`
  */
@@ -263,7 +263,10 @@ export function statementPayState(
   if (!rule) return { kind: "no-rule" };
 
   const closing = lastClosingOnOrBefore(rule, from);
-  if (!closing) return { kind: "not-closed", nextClosing: nextClosing(rule, from) };
+  // a closing from before the card was added is not a statement of ours to pay
+  if (!closing || (card.createdAt && closing < parseYmd(card.createdAt))) {
+    return { kind: "not-closed", nextClosing: nextClosing(rule, from) };
+  }
 
   const period = periodKey(closing.getFullYear(), closing.getMonth());
   const snapshot = snapshots.find((s) => s.cardId === card.id && s.period === period);

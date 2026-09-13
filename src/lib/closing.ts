@@ -139,20 +139,37 @@ export function closingInMonth(rule: ClosingRule, year: number, month: number): 
 }
 
 /**
+ * The closing whose statement is still awaiting payment, or null when nothing is pending:
+ * the most recent closing on/before `from`, unless it was already paid (`lastPaymentAt >=
+ * closing`) or it happened before the card existed in the app (`since`, yyyy-mm-dd) — a card
+ * added today has no resumen from last month to pay. Single source of truth for
+ * `currentDueClosing`, `paymentAlert` and `statementPayState`.
+ */
+export function pendingClosing(
+  rule: ClosingRule,
+  from: Date = new Date(),
+  lastPaymentAt: string | null = null,
+  since: string | null = null,
+): Date | null {
+  const last = lastClosingOnOrBefore(rule, from);
+  if (!last) return null;
+  if (lastPaymentAt && parseYmd(lastPaymentAt) >= last) return null;
+  if (since && last < parseYmd(since)) return null;
+  return last;
+}
+
+/**
  * The statement currently "due" — the anchor for installment scheduling (offset 0).
- * It's the most recent closing on/before `from` when that statement is still unpaid
- * (so a resumen that already closed earlier this month is NOT skipped); otherwise the
- * next upcoming closing. Mirrors `paymentAlert`'s "already paid" check
- * (`lastPaymentAt >= closing` ⇒ settled) so the two stay consistent.
+ * It's the pending closing (see `pendingClosing`, so a resumen that already closed earlier this
+ * month is NOT skipped); otherwise the next upcoming closing.
  */
 export function currentDueClosing(
   rule: ClosingRule,
   from: Date = new Date(),
   lastPaymentAt: string | null = null,
+  since: string | null = null,
 ): Date {
-  const last = lastClosingOnOrBefore(rule, from);
-  if (last && !(lastPaymentAt && parseYmd(lastPaymentAt) >= last)) return last;
-  return nextClosing(rule, from);
+  return pendingClosing(rule, from, lastPaymentAt, since) ?? nextClosing(rule, from);
 }
 
 /**
@@ -232,6 +249,7 @@ export function lastClosingOnOrBefore(rule: ClosingRule, from: Date = new Date()
  * - `hasDebt`: there's something to pay (a fully paid-off card never alerts).
  * - `lastPaymentAt` (yyyy-mm-dd): if the card was paid on/after the current statement's
  *   closing, the statement is considered settled → no alert (fixes the "stuck overdue" bug).
+ * - `since` (yyyy-mm-dd): day the card was added; closings before it never alert.
  * Returns null when nothing to flag.
  */
 export function paymentAlert(
@@ -241,12 +259,11 @@ export function paymentAlert(
   lastPaymentAt: string | null = null,
   from: Date = new Date(),
   dueSoonDays = 5,
+  since: string | null = null,
 ): { level: "due-soon" | "overdue"; due: Date; days: number } | null {
   if (dueDays == null || !hasDebt) return null;
-  const closing = lastClosingOnOrBefore(rule, from);
+  const closing = pendingClosing(rule, from, lastPaymentAt, since);
   if (!closing) return null;
-  // already paid this statement (payment on/after it closed)
-  if (lastPaymentAt && parseYmd(lastPaymentAt) >= closing) return null;
   const due = dueDate(closing, dueDays);
   const days = daysUntil(due, from);
   if (days < 0) return { level: "overdue", due, days };

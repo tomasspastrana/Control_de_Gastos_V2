@@ -28,6 +28,7 @@ export interface Card {
   closingWeekday?: number | null; // weekday_from: 0=Sun..6=Sat
   dueDays?: number | null;
   lastPaymentAt?: string | null; // yyyy-mm-dd, day the statement was last paid
+  createdAt?: string | null; // yyyy-mm-dd, day the card was added — closings before it are never "pending"
 }
 
 export interface Purchase {

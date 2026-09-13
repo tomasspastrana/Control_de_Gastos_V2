@@ -16,7 +16,7 @@ export function ClosingInfo({ card, compact = false, alert = null }: { card: Car
 
   // the statement currently awaiting payment (the resumen that already closed but isn't paid yet),
   // or the next upcoming closing once it's settled — matches "Pagar tarjeta" / the payment alert.
-  const close = currentDueClosing(rule, new Date(), card.lastPaymentAt ?? null);
+  const close = currentDueClosing(rule, new Date(), card.lastPaymentAt ?? null, card.createdAt ?? null);
   const closeDays = daysUntil(close);
   const due = card.dueDays != null ? dueDate(close, card.dueDays) : null;
   const dueDaysLeft = due ? daysUntil(due) : null;
