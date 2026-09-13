@@ -52,6 +52,7 @@ export function NewCardModal({ open, onClose, onCreate, initialTheme }: Props) {
       ...emptyClosingForm(),
       ruleType: p?.ruleType ?? "",
       day: p?.day ? String(p.day) : "",
+      weekday: p?.weekday != null ? String(p.weekday) : "",
       businessAdjust: !!p?.businessAdjust,
       dueDays: p?.dueDays ? String(p.dueDays) : "",
     });

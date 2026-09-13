@@ -12,6 +12,7 @@ import {
   parseYmd,
   paymentAlert,
   purchaseStatement,
+  ruleFromCard,
   upcomingClosings,
   ymd,
 } from "./closing";
@@ -78,6 +79,39 @@ describe("weekday_cycle mensual: clamp al último jueves en meses cortos", () =>
     expect(ymd(closingInMonth(rule, 2026, 1)!)).toBe("2026-02-26"); // feb: sólo 4 jueves → último
     expect(ymd(closingInMonth(rule, 2026, 7)!)).toBe("2026-08-27"); // agosto
     expect(ymd(closingInMonth(rule, 2026, 8)!)).toBe("2026-09-24"); // septiembre
+  });
+});
+
+describe("weekday_from (Cencopay) — primer jueves a partir del día 6", () => {
+  // resúmenes reales 2026: 07/05, 11/06, 08/07 (el 9/7 es feriado → hábil anterior), 06/08, 10/09
+  const cenco: ClosingRule = { type: "weekday_from", weekday: 4, fromDay: 6, businessAdjust: true };
+  it("reproduce los cinco cierres reales, incluido el corrimiento por feriado", () => {
+    const cs = upcomingClosings(cenco, parseYmd("2026-05-01"), 5).map(ymd);
+    expect(cs).toEqual(["2026-05-07", "2026-06-11", "2026-07-08", "2026-08-06", "2026-09-10"]);
+  });
+  it("alterna 1er/2do jueves según el mes (donde weekday_cycle fallaría)", () => {
+    expect(ymd(closingInMonth(cenco, 2026, 11)!)).toBe("2026-12-10");
+    expect(ymd(closingInMonth(cenco, 2027, 0)!)).toBe("2027-01-07");
+  });
+  it("vence a los 8 días: siempre el viernes de la semana siguiente", () => {
+    expect(ymd(dueDate(parseYmd("2026-05-07"), 8))).toBe("2026-05-15");
+    expect(ymd(dueDate(parseYmd("2026-06-11"), 8))).toBe("2026-06-19");
+    expect(ymd(dueDate(parseYmd("2026-08-06"), 8))).toBe("2026-08-14");
+    expect(ymd(dueDate(parseYmd("2026-09-10"), 8))).toBe("2026-09-18");
+  });
+  it("lastClosingOnOrBefore camina hacia atrás", () => {
+    expect(ymd(lastClosingOnOrBefore(cenco, parseYmd("2026-09-01"))!)).toBe("2026-08-06");
+    expect(ymd(lastClosingOnOrBefore(cenco, parseYmd("2026-09-13"))!)).toBe("2026-09-10");
+  });
+  it("no se pasa del mes cuando el día de inicio está al final (clamp)", () => {
+    const late: ClosingRule = { type: "weekday_from", weekday: 4, fromDay: 28, businessAdjust: false };
+    // feb-2027: 28 es domingo → el jueves siguiente sería el 4-mar → se retrocede al 25-feb
+    expect(ymd(closingInMonth(late, 2027, 1)!)).toBe("2027-02-25");
+  });
+  it("ruleFromCard arma la regla desde las columnas (y no sin el día de semana)", () => {
+    const cols = { closingRuleType: "weekday_from", closingDay: 6, closingBusinessAdjust: true, closingWeekday: 4 };
+    expect(ruleFromCard(cols)).toEqual(cenco);
+    expect(ruleFromCard({ ...cols, closingWeekday: null })).toBeNull();
   });
 });
 

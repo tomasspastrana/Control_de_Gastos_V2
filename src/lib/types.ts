@@ -6,7 +6,7 @@ export type ThemeName = "violet" | "coral" | "ocean" | "teal" | "rose" | "noir";
 
 export type Rates = Record<Currency, number>;
 
-export type ClosingRuleType = "fixed_day" | "weekday_cycle";
+export type ClosingRuleType = "fixed_day" | "weekday_cycle" | "weekday_from";
 
 export interface Card {
   id: string;
@@ -21,10 +21,11 @@ export interface Card {
   issuer?: string | null;
   // billing-cycle closing rule (null = not configured)
   closingRuleType?: ClosingRuleType | null;
-  closingDay?: number | null;
+  closingDay?: number | null; // fixed_day: the day; weekday_from: "from day"
   closingBusinessAdjust?: boolean;
   closingAnchor?: string | null; // yyyy-mm-dd
   closingNextGap?: number | null; // 28 | 35
+  closingWeekday?: number | null; // weekday_from: 0=Sun..6=Sat
   dueDays?: number | null;
   lastPaymentAt?: string | null; // yyyy-mm-dd, day the statement was last paid
 }

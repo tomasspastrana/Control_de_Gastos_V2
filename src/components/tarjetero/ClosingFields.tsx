@@ -5,8 +5,9 @@ import type { Card } from "@/lib/types";
 import { TjSelect } from "./TjSelect";
 
 export interface ClosingForm {
-  ruleType: "" | "fixed_day" | "weekday_cycle";
-  day: string;
+  ruleType: "" | "fixed_day" | "weekday_cycle" | "weekday_from";
+  day: string; // fixed_day: closing day; weekday_from: "from day"
+  weekday: string; // weekday_from: "0".."6" (Sun..Sat)
   businessAdjust: boolean;
   lastClose: string; // yyyy-mm-dd
   prevClose: string; // yyyy-mm-dd
@@ -16,6 +17,7 @@ export interface ClosingForm {
 export const emptyClosingForm = (): ClosingForm => ({
   ruleType: "",
   day: "",
+  weekday: "",
   businessAdjust: false,
   lastClose: "",
   prevClose: "",
@@ -28,6 +30,7 @@ export function formFromCard(c: Card): ClosingForm {
   f.ruleType = (c.closingRuleType as ClosingForm["ruleType"]) || "";
   f.businessAdjust = !!c.closingBusinessAdjust;
   f.day = c.closingDay != null ? String(c.closingDay) : "";
+  f.weekday = c.closingWeekday != null ? String(c.closingWeekday) : "";
   f.dueDays = c.dueDays != null ? String(c.dueDays) : "";
   if (c.closingRuleType === "weekday_cycle" && c.closingAnchor && c.closingNextGap) {
     const prevGap = c.closingNextGap === 28 ? 35 : 28;
@@ -40,15 +43,25 @@ export function formFromCard(c: Card): ClosingForm {
 /** Normalized flat closing columns from the form (null when not configured / incomplete). */
 export function buildClosingPayload(f: ClosingForm) {
   const empty = {
-    closingRuleType: null as "fixed_day" | "weekday_cycle" | null,
+    closingRuleType: null as "fixed_day" | "weekday_cycle" | "weekday_from" | null,
     closingDay: null as number | null,
     closingBusinessAdjust: false,
     closingAnchor: null as string | null,
     closingNextGap: null as number | null,
+    closingWeekday: null as number | null,
     dueDays: f.dueDays ? parseInt(f.dueDays, 10) : null,
   };
   if (f.ruleType === "fixed_day" && f.day) {
     return { ...empty, closingRuleType: "fixed_day" as const, closingDay: parseInt(f.day, 10), closingBusinessAdjust: f.businessAdjust };
+  }
+  if (f.ruleType === "weekday_from" && f.day && f.weekday !== "") {
+    return {
+      ...empty,
+      closingRuleType: "weekday_from" as const,
+      closingDay: parseInt(f.day, 10),
+      closingWeekday: parseInt(f.weekday, 10),
+      closingBusinessAdjust: f.businessAdjust,
+    };
   }
   if (f.ruleType === "weekday_cycle" && f.lastClose && f.prevClose) {
     const [a, b] = [f.prevClose, f.lastClose].sort();
@@ -62,6 +75,17 @@ const RULE_OPTIONS = [
   { value: "", label: "Sin configurar" },
   { value: "fixed_day", label: "Día fijo del mes" },
   { value: "weekday_cycle", label: "Día de semana (ciclo)" },
+  { value: "weekday_from", label: "Día de semana a partir de un día del mes" },
+];
+
+const WEEKDAY_OPTIONS = [
+  { value: "1", label: "Lunes" },
+  { value: "2", label: "Martes" },
+  { value: "3", label: "Miércoles" },
+  { value: "4", label: "Jueves" },
+  { value: "5", label: "Viernes" },
+  { value: "6", label: "Sábado" },
+  { value: "0", label: "Domingo" },
 ];
 
 export function ClosingFields({ form, setForm }: { form: ClosingForm; setForm: (f: ClosingForm) => void }) {
@@ -114,6 +138,32 @@ export function ClosingFields({ form, setForm }: { form: ClosingForm; setForm: (
             <label className="tj-label">Vence a los (días corridos)</label>
             <input className="tj-input" value={form.dueDays} inputMode="numeric" placeholder="11" onChange={(e) => set("dueDays", e.target.value.replace(/\D/g, "").slice(0, 2))} />
           </div>
+        </div>
+      )}
+
+      {form.ruleType === "weekday_from" && (
+        <div className="mt-3">
+          <div className="mb-2 text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
+            Cierra el <b>primer día de semana elegido a partir de un día del mes</b> (ej. Cencopay: primer jueves a partir del día 6).
+          </div>
+          <div className="flex gap-3">
+            <div className="tj-field flex-1">
+              <label className="tj-label">Día de semana</label>
+              <TjSelect value={form.weekday} onChange={(v) => set("weekday", v)} placeholder="Elegí el día" options={WEEKDAY_OPTIONS} />
+            </div>
+            <div className="tj-field flex-1">
+              <label className="tj-label">A partir del día</label>
+              <input className="tj-input" value={form.day} inputMode="numeric" placeholder="6" onChange={(e) => set("day", e.target.value.replace(/\D/g, "").slice(0, 2))} />
+            </div>
+          </div>
+          <div className="tj-field">
+            <label className="tj-label">Vence a los (días corridos)</label>
+            <input className="tj-input" value={form.dueDays} inputMode="numeric" placeholder="8" onChange={(e) => set("dueDays", e.target.value.replace(/\D/g, "").slice(0, 2))} />
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 text-[12.5px] font-semibold" style={{ color: "var(--tj-muted-2)" }}>
+            <input type="checkbox" checked={form.businessAdjust} onChange={(e) => set("businessAdjust", e.target.checked)} />
+            Si cae feriado, mover al día hábil anterior (ej. Cencopay)
+          </label>
         </div>
       )}
     </div>

@@ -57,6 +57,7 @@ interface CardRow {
   closing_business_adjust: boolean | null;
   closing_anchor: string | null;
   closing_next_gap: number | null;
+  closing_weekday: number | null;
   due_days: number | null;
   last_payment_at: string | null;
 }
@@ -74,7 +75,7 @@ async function main() {
   // dates come back as text so they never drift through a JS Date/timezone round trip
   const cards = await sql<CardRow[]>`
     select id, user_id, nickname, closing_rule_type, closing_day, closing_business_adjust,
-           closing_anchor::text as closing_anchor, closing_next_gap, due_days,
+           closing_anchor::text as closing_anchor, closing_next_gap, closing_weekday, due_days,
            last_payment_at::text as last_payment_at
       from cards
      where last_payment_at is not null
@@ -106,6 +107,7 @@ async function main() {
       closingBusinessAdjust: c.closing_business_adjust,
       closingAnchor: c.closing_anchor,
       closingNextGap: c.closing_next_gap,
+      closingWeekday: c.closing_weekday,
     });
     if (!rule) {
       console.log("   sin ciclo de cierre configurado — se omite");

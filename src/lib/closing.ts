@@ -1,14 +1,17 @@
 // Closing-date logic for credit cards (Argentina).
-// Two rule shapes cover the banks we've seen:
+// Three rule shapes cover the banks we've seen:
 //  - fixed_day: closes on a calendar day each month (optionally moved to the previous business day)
 //  - weekday_cycle: closes always on the same weekday, alternating +28/+35 days from an anchor
 //    (BBVA Francés, Banco Patagonia). Predictions are estimates; the user can re-anchor.
+//  - weekday_from: closes on the first `weekday` on/after day `fromDay` of each month, moved to the
+//    previous business day on holidays (Cencopay: first Thursday from the 6th → 07/05, 11/06, 08/07…).
 //
 // Pure & side-effect free → unit-tested in closing.test.ts.
 
 export type ClosingRule =
   | { type: "fixed_day"; day: number; businessAdjust: boolean }
-  | { type: "weekday_cycle"; anchor: string; nextGap: 28 | 35 }; // anchor = "yyyy-mm-dd"
+  | { type: "weekday_cycle"; anchor: string; nextGap: 28 | 35 } // anchor = "yyyy-mm-dd"
+  | { type: "weekday_from"; weekday: number; fromDay: number; businessAdjust: boolean }; // weekday 0=Sun..6=Sat
 
 // ---- Argentina national holidays (maintainable; weekends are handled separately).
 // Note: does NOT include ad-hoc "feriados puente" — closing dates are editable to correct drift.
@@ -90,26 +93,43 @@ function weekdayClosingForMonth(anchor: string, year: number, month: number): Da
   return nthWeekdayOfMonth(year, month, a.getDay(), ordinal);
 }
 
+/**
+ * A `weekday_from` card closes on the first `weekday` on/after day `fromDay` of the month
+ * (Cencopay: first Thursday from the 6th → the Thursday that falls between the 6th and the 12th).
+ * Clamped back a week if that overflows the month; holidays move it to the previous business day.
+ */
+function weekdayFromClosingForMonth(year: number, month: number, weekday: number, fromDay: number, businessAdjust: boolean): Date {
+  const fromWd = new Date(year, month, fromDay).getDay();
+  let day = fromDay + ((weekday - fromWd + 7) % 7);
+  if (day > lastDayOfMonth(year, month)) day -= 7;
+  let d = new Date(year, month, day);
+  if (businessAdjust) d = prevBusinessDay(d);
+  return d;
+}
+
+/** The single closing of calendar (year, month) for any rule shape — all three close once a month. */
+function closingForMonth(rule: ClosingRule, year: number, month: number): Date {
+  switch (rule.type) {
+    case "fixed_day":
+      return fixedClosingForMonth(year, month, rule.day, rule.businessAdjust);
+    case "weekday_cycle":
+      return weekdayClosingForMonth(rule.anchor, year, month);
+    case "weekday_from":
+      return weekdayFromClosingForMonth(year, month, rule.weekday, rule.fromDay, rule.businessAdjust);
+  }
+}
+
 /** Next closing date on or after `from` (defaults to today). */
 export function nextClosing(rule: ClosingRule, from: Date = new Date()): Date {
   const start = atMidnight(from);
-  if (rule.type === "fixed_day") {
-    for (let i = 0; i < 4; i++) {
-      const base = new Date(start.getFullYear(), start.getMonth() + i, 1);
-      const c = fixedClosingForMonth(base.getFullYear(), base.getMonth(), rule.day, rule.businessAdjust);
-      if (c >= start) return c;
-    }
-    // fallback (shouldn't happen)
-    return fixedClosingForMonth(start.getFullYear(), start.getMonth() + 1, rule.day, rule.businessAdjust);
-  }
-  // weekday_cycle: one closing per calendar month — the first one on/after `start`
+  // one closing per calendar month — the first one on/after `start`
   for (let i = 0; i < 24; i++) {
     const base = new Date(start.getFullYear(), start.getMonth() + i, 1);
-    const c = weekdayClosingForMonth(rule.anchor, base.getFullYear(), base.getMonth());
+    const c = closingForMonth(rule, base.getFullYear(), base.getMonth());
     if (c >= start) return c;
   }
   const far = new Date(start.getFullYear(), start.getMonth() + 24, 1);
-  return weekdayClosingForMonth(rule.anchor, far.getFullYear(), far.getMonth());
+  return closingForMonth(rule, far.getFullYear(), far.getMonth());
 }
 
 /** The card's statement closing that falls within calendar (year, month), or null. */
@@ -198,18 +218,10 @@ export function closingSpan(a: Date, b: Date): number {
 /** Most recent closing on or before `from` (the statement currently awaiting payment). */
 export function lastClosingOnOrBefore(rule: ClosingRule, from: Date = new Date()): Date | null {
   const start = atMidnight(from);
-  if (rule.type === "fixed_day") {
-    for (let i = 0; i < 4; i++) {
-      const base = new Date(start.getFullYear(), start.getMonth() - i, 1);
-      const c = fixedClosingForMonth(base.getFullYear(), base.getMonth(), rule.day, rule.businessAdjust);
-      if (c <= start) return c;
-    }
-    return null;
-  }
-  // weekday_cycle: one closing per calendar month — the last one on/before `start`
+  // one closing per calendar month — the last one on/before `start`
   for (let i = 0; i < 24; i++) {
     const base = new Date(start.getFullYear(), start.getMonth() - i, 1);
-    const c = weekdayClosingForMonth(rule.anchor, base.getFullYear(), base.getMonth());
+    const c = closingForMonth(rule, base.getFullYear(), base.getMonth());
     if (c <= start) return c;
   }
   return null;
@@ -260,12 +272,17 @@ export function ruleFromCard(c: {
   closingBusinessAdjust?: boolean | null;
   closingAnchor?: string | null;
   closingNextGap?: number | null;
+  closingWeekday?: number | null;
 }): ClosingRule | null {
   if (c.closingRuleType === "fixed_day" && c.closingDay != null) {
     return { type: "fixed_day", day: c.closingDay, businessAdjust: !!c.closingBusinessAdjust };
   }
   if (c.closingRuleType === "weekday_cycle" && c.closingAnchor && (c.closingNextGap === 28 || c.closingNextGap === 35)) {
     return { type: "weekday_cycle", anchor: c.closingAnchor, nextGap: c.closingNextGap };
+  }
+  // weekday_from reuses closing_day as "from day"; the weekday lives in its own column
+  if (c.closingRuleType === "weekday_from" && c.closingDay != null && c.closingWeekday != null) {
+    return { type: "weekday_from", weekday: c.closingWeekday, fromDay: c.closingDay, businessAdjust: !!c.closingBusinessAdjust };
   }
   return null;
 }

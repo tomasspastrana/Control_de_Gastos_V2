@@ -20,7 +20,8 @@ export function ClosingInfo({ card, compact = false, alert = null }: { card: Car
   const closeDays = daysUntil(close);
   const due = card.dueDays != null ? dueDate(close, card.dueDays) : null;
   const dueDaysLeft = due ? daysUntil(due) : null;
-  const estimado = rule.type === "weekday_cycle";
+  // weekday rules are patterns inferred from statements, not a contractual day → flag as estimates
+  const estimado = rule.type !== "fixed_day";
 
   if (compact) {
     return (

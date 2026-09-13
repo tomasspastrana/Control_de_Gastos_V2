@@ -143,11 +143,16 @@ redepliega automático. (Ver sección 8 y 9.)
 - Todo se convierte a **ARS** usando los tipos de cambio del perfil.
 
 ### Fechas de cierre (`closing.ts`) — el hallazgo
-Analizando los resúmenes encontramos **dos patrones**:
+Analizando los resúmenes encontramos **tres patrones**:
 - **BBVA Francés y Banco Patagonia:** cierran **siempre el mismo día de semana (jueves)**, alternando
   **+28 / +35 días**. Por eso "se corren" del calendario. Se modela con una **fecha ancla + alternancia**.
 - **Ualá:** **día fijo 30**, movido al **hábil anterior** si cae finde/feriado. **Sucrédito:** día fijo
   del calendario. Se modela como **`fixed_day`** (con o sin ajuste a día hábil).
+- **Cencopay (Cencosud):** cierra el **primer jueves a partir del día 6** (o sea, el jueves que cae entre
+  el 6 y el 12; si es feriado, el hábil anterior — 08/07/2026) y vence **8 días después** (viernes de la
+  semana siguiente). Alterna 1º/2º jueves según el mes, así que no entra en `weekday_cycle`: se modela
+  como **`weekday_from`** (día de semana + "a partir del día"). El cierre de nov-2026 dirá si el inicio
+  es el día 5 o el 6 (5/11 vs 12/11); se ajusta desde "Ajustar cierre".
 
 `closing.ts` incluye un **calendario de feriados AR**, cálculo de **días hábiles**, y predice el
 **próximo cierre** y el **vencimiento** (`cierre + N días`, movido a hábil siguiente). Como puede

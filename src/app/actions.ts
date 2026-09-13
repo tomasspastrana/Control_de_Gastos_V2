@@ -43,6 +43,7 @@ export async function createCard(input: unknown) {
     closingBusinessAdjust: d.closingBusinessAdjust ?? false,
     closingAnchor: d.closingAnchor ?? null,
     closingNextGap: d.closingNextGap ?? null,
+    closingWeekday: d.closingWeekday ?? null,
     dueDays: d.dueDays ?? null,
   });
   done();
@@ -60,6 +61,7 @@ export async function updateCardClosing(cardId: string, input: unknown) {
       closingBusinessAdjust: d.closingBusinessAdjust ?? false,
       closingAnchor: d.closingAnchor ?? null,
       closingNextGap: d.closingNextGap ?? null,
+      closingWeekday: d.closingWeekday ?? null,
       dueDays: d.dueDays ?? null,
     })
     .where(and(eq(cards.id, cardId), eq(cards.userId, userId)));

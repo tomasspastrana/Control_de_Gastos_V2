@@ -1,14 +1,16 @@
 // Catalog of Argentine issuers with a closing-rule preset that pre-fills the card form.
-// Only BBVA/Patagonia/Ualá/Sucrédito are *confirmed* from real statements; the rest default to
-// "fixed_day" (the common case) with a typical day the user confirms with their own resumen.
+// Only BBVA/Patagonia/Ualá/Sucrédito/Cencopay are *confirmed* from real statements; the rest default
+// to "fixed_day" (the common case) with a typical day the user confirms with their own resumen.
 // Closing dates are often account-specific and changeable, so presets are starting points.
 
 import type { ClosingRuleType } from "./types";
 
 export interface BankPreset {
   ruleType: ClosingRuleType;
-  /** typical closing day for fixed_day (user confirms) */
+  /** typical closing day for fixed_day (user confirms); "from day" for weekday_from */
   day?: number;
+  /** weekday_from only: 0=Sun..6=Sat */
+  weekday?: number;
   businessAdjust?: boolean;
   dueDays?: number;
 }
@@ -27,6 +29,8 @@ export const BANKS: Bank[] = [
   { id: "patagonia", name: "Banco Patagonia", confirmed: true, preset: { ruleType: "weekday_cycle", dueDays: 10 } },
   { id: "uala", name: "Ualá", confirmed: true, preset: { ruleType: "fixed_day", day: 30, businessAdjust: true, dueDays: 8 } },
   { id: "sucredito", name: "Sucrédito", confirmed: true, preset: { ruleType: "fixed_day", day: 23, businessAdjust: false, dueDays: 9 } },
+  // first Thursday from the 6th (07/05, 11/06, 08/07 holiday-adjusted, 06/08, 10/09 2026); due = Friday of the next week
+  { id: "cencopay", name: "Cencopay (Cencosud)", confirmed: true, preset: { ruleType: "weekday_from", weekday: 4, day: 6, businessAdjust: true, dueDays: 8 } },
   // --- generic defaults (fixed day, user confirms) ---
   { id: "galicia", name: "Banco Galicia", preset: { ruleType: "fixed_day", businessAdjust: true, dueDays: 10 } },
   { id: "santander", name: "Santander", preset: { ruleType: "fixed_day", businessAdjust: true, dueDays: 10 } },

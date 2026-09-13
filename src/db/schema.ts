@@ -8,7 +8,7 @@ import type { StatementSnapshotItem } from "../lib/types";
 export const currencyEnum = pgEnum("currency", ["ARS", "USD", "EUR"]);
 export const brandEnum = pgEnum("card_brand", ["visa", "mastercard"]);
 export const themeEnum = pgEnum("card_theme", ["violet", "coral", "ocean", "teal", "rose", "noir"]);
-export const closingRuleEnum = pgEnum("closing_rule", ["fixed_day", "weekday_cycle"]);
+export const closingRuleEnum = pgEnum("closing_rule", ["fixed_day", "weekday_cycle", "weekday_from"]);
 
 export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey(), // = auth.users.id
@@ -36,6 +36,7 @@ export const cards = pgTable("cards", {
   closingBusinessAdjust: boolean("closing_business_adjust").notNull().default(false),
   closingAnchor: date("closing_anchor", { mode: "string" }),
   closingNextGap: integer("closing_next_gap"),
+  closingWeekday: integer("closing_weekday"), // weekday_from: 0=Sun..6=Sat (closing_day = "from day")
   dueDays: integer("due_days"),
   // day the card statement was last paid ("Pagar tarjeta"); clears the payment-due alert
   lastPaymentAt: date("last_payment_at", { mode: "string" }),

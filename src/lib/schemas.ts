@@ -27,11 +27,12 @@ const positiveAmount = (msg: string) =>
 // closing-rule fields (flat, shared by card create + closing update)
 const closingFields = {
   issuer: z.string().trim().nullish(),
-  closingRuleType: z.enum(["fixed_day", "weekday_cycle"]).nullish(),
+  closingRuleType: z.enum(["fixed_day", "weekday_cycle", "weekday_from"]).nullish(),
   closingDay: z.coerce.number().int().min(1).max(31).nullish(),
   closingBusinessAdjust: z.boolean().optional(),
   closingAnchor: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
   closingNextGap: z.coerce.number().int().nullish(),
+  closingWeekday: z.coerce.number().int().min(0).max(6).nullish(),
   dueDays: z.coerce.number().int().min(0).max(90).nullish(),
 };
 
@@ -62,6 +63,12 @@ export const closingConfigSchema = z
       (!v.closingAnchor || (v.closingNextGap !== 28 && v.closingNextGap !== 35))
     )
       ctx.addIssue({ code: "custom", message: "Faltan las dos fechas de cierre", path: ["closingAnchor"] });
+    if (v.closingRuleType === "weekday_from") {
+      if (v.closingWeekday == null)
+        ctx.addIssue({ code: "custom", message: "Falta el día de semana", path: ["closingWeekday"] });
+      if (v.closingDay == null || v.closingDay > 28)
+        ctx.addIssue({ code: "custom", message: "El día de inicio debe estar entre 1 y 28", path: ["closingDay"] });
+    }
   });
 
 export const purchaseSchema = z

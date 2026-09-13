@@ -24,6 +24,7 @@ function toCard(r: CardRow): Card {
     closingBusinessAdjust: r.closingBusinessAdjust,
     closingAnchor: r.closingAnchor,
     closingNextGap: r.closingNextGap,
+    closingWeekday: r.closingWeekday,
     dueDays: r.dueDays,
     lastPaymentAt: r.lastPaymentAt,
   };
