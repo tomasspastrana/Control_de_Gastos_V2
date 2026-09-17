@@ -8,7 +8,7 @@ import { purchaseSchema, toAmount } from "@/lib/schemas";
 import { uid } from "@/lib/id";
 import { fmt, rate } from "@/lib/calc";
 import { currentDueClosing, dueDate, fmtClosing, ruleFromCard } from "@/lib/closing";
-import { purchaseNextClosing } from "@/lib/statements";
+import { cardSince, purchaseNextClosing } from "@/lib/statements";
 import { CATEGORIES, CURRENCIES, type Card, type Currency, type Purchase, type Rates } from "@/lib/types";
 
 interface Props {
@@ -17,7 +17,7 @@ interface Props {
   onCreate: (purchase: Purchase) => void;
   onUpdate: (id: string, purchase: Purchase) => void;
   cards: Card[];
-  /** all purchases — only used to suggest people already used on shared purchases */
+  /** all purchases — suggests people already used on shared purchases and anchors the statement preview */
   purchases?: Purchase[];
   rates: Rates;
   defaultCardId: string;
@@ -88,8 +88,11 @@ export function NewPurchaseModal({ open, onClose, onCreate, onUpdate, cards, pur
   const simInst = Math.max(1, parseInt(f.installments || "1", 10) || 1);
   const simPaid = Math.min(Math.max(0, parseInt(f.paidInstallments || "0", 10) || 0), simInst);
   const simFullyPaid = simPaid >= simInst;
-  const simAnchor = simRule ? currentDueClosing(simRule, new Date(), simCard?.lastPaymentAt ?? null, simCard?.createdAt ?? null) : null;
   const simDateOk = /^\d{4}-\d{2}-\d{2}$/.test(f.date); // the date input is empty mid-edit
+  // this very line counts too: backdating it on a card added after its last closing is what
+  // makes that closed statement ours (see cardSince)
+  const simSince = simCard ? cardSince(simCard, purchases, simDateOk && !simFullyPaid ? [f.date] : []) : null;
+  const simAnchor = simRule ? currentDueClosing(simRule, new Date(), simCard?.lastPaymentAt ?? null, simSince) : null;
   const simClosing =
     simRule && simAnchor ? (simDateOk ? purchaseNextClosing(simRule, { date: f.date }, simAnchor) : simAnchor) : null;
   const simDeferred = !!(simClosing && simAnchor && simClosing > simAnchor);

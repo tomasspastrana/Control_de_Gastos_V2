@@ -74,6 +74,29 @@ function firstClosingOf(rule: ClosingRule, p: Pick<Purchase, "date">): Date {
 }
 
 /**
+ * The day from which closings count as the card's own (the `since` of `pendingClosing`): the day
+ * it was added to the app, pulled back to the earliest pending purchase. A card added mid-cycle
+ * with purchases dated before its last closing DOES owe that statement — loading a purchase
+ * with an older date is how the user says so (Cencopay added the 13th with purchases from the
+ * 13th of last month: its resumen closed the 10th and is due now). A card whose purchases are
+ * all newer than the last closing keeps ignoring it. Pass `extraDates` for purchases not saved
+ * yet (the new-purchase form previews its own line).
+ */
+export function cardSince(
+  card: Pick<Card, "id" | "createdAt">,
+  purchases: Pick<Purchase, "cardId" | "date" | "installments" | "paidInstallments">[],
+  extraDates: string[] = [],
+): string | null {
+  let since = card.createdAt ?? null;
+  if (!since) return null;
+  for (const p of purchases) {
+    if (p.cardId === card.id && p.paidInstallments < p.installments && p.date < since) since = p.date;
+  }
+  for (const d of extraDates) if (d < since) since = d;
+  return since;
+}
+
+/**
  * The closing whose statement bills this purchase's next cuota: the card's anchor, unless the
  * purchase is younger than it (bought after the card closed) and has to wait for a later one.
  * Takes just the date so the "where would this land?" preview in the new-purchase form can use
@@ -118,7 +141,7 @@ export function cardStatement(
   if (!rule) return { ...base, closing: null, due: null, items: [], total: 0, ownTotal: 0 };
 
   // anchor offset 0 on the resumen actually due now (may have closed earlier this month)
-  const start = currentDueClosing(rule, from, card.lastPaymentAt ?? null, card.createdAt ?? null);
+  const start = currentDueClosing(rule, from, card.lastPaymentAt ?? null, cardSince(card, purchases));
   const found = forwardClosingInMonth(rule, year, month, from, start);
   if (!found) return { ...base, closing: null, due: null, items: [], total: 0, ownTotal: 0 };
   const { closing, offset } = found;
@@ -188,7 +211,7 @@ export function currentStatement(
   from: Date = new Date(),
 ): CardStatement {
   const rule = ruleFromCard(card);
-  const closing = rule ? currentDueClosing(rule, from, card.lastPaymentAt ?? null, card.createdAt ?? null) : null;
+  const closing = rule ? currentDueClosing(rule, from, card.lastPaymentAt ?? null, cardSince(card, purchases)) : null;
   return statementAt(card, purchases, fixed, rates, closing);
 }
 
@@ -269,7 +292,7 @@ export function periodKey(year: number, month: number): string {
  * it has closed, and only once: the saved snapshot for its period IS the "already paid" record,
  * so this never depends on `lastPaymentAt` (which says when, not what).
  *  - `no-rule`     → no billing cycle configured, nothing to pay against
- *  - `not-closed`  → no closing behind us since the card was added (brand-new card)
+ *  - `not-closed`  → no closing behind us since the card was added (brand-new card, see `cardSince`)
  *  - `payable`     → the last closing's statement has no snapshot → pay it
  *  - `paid`        → it's already in history; the next one opens at `nextClosing`
  */
@@ -291,8 +314,9 @@ export function statementPayState(
   if (!rule) return { kind: "no-rule" };
 
   const closing = lastClosingOnOrBefore(rule, from);
-  // a closing from before the card was added is not a statement of ours to pay
-  if (!closing || (card.createdAt && closing < parseYmd(card.createdAt))) {
+  // a closing from before the card was added (and before any of its purchases) is not ours to pay
+  const since = cardSince(card, purchases);
+  if (!closing || (since && closing < parseYmd(since))) {
     return { kind: "not-closed", nextClosing: nextClosing(rule, from) };
   }
 

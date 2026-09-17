@@ -3,6 +3,7 @@
 import type { Card, FixedExpense, Purchase, Rates } from "@/lib/types";
 import { cardMetrics } from "@/lib/calc";
 import { paymentAlert, ruleFromCard } from "@/lib/closing";
+import { cardSince } from "@/lib/statements";
 
 interface Props {
   cards: Card[];
@@ -26,7 +27,7 @@ export function CardAlerts({ cards, purchases, rates, fixedExpenses, onOpenCard 
     const rule = ruleFromCard(c);
     if (!rule) continue;
     const m = cardMetrics(c, purchases, rates, fixedExpenses);
-    const a = paymentAlert(rule, c.dueDays ?? null, m.debt > 0.5, c.lastPaymentAt ?? null, new Date(), 5, c.createdAt ?? null);
+    const a = paymentAlert(rule, c.dueDays ?? null, m.debt > 0.5, c.lastPaymentAt ?? null, new Date(), 5, cardSince(c, purchases));
     if (a) items.push({ id: c.id, nickname: c.nickname, level: a.level, days: a.days });
   }
   if (items.length === 0) return null;

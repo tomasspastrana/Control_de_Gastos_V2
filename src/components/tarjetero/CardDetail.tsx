@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import type { Card, FixedExpense, Purchase, Rates, StatementSnapshot } from "@/lib/types";
 import { cardMetrics, catColor, fmt, fmtCur, fmtDate, hexA, purchaseInstallment, purchaseOwnRemaining, purchaseRemaining, rate } from "@/lib/calc";
 import { currentDueClosing, dueDate, fmtClosing, paymentAlert, ruleFromCard } from "@/lib/closing";
-import { purchaseNextClosing, statementPayState, type CardStatement } from "@/lib/statements";
+import { cardSince, purchaseNextClosing, statementPayState, type CardStatement } from "@/lib/statements";
 import { updateCardClosing } from "@/app/actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CreditCardVisual } from "./CreditCardVisual";
@@ -49,10 +49,11 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
   const cardFixed = fixedExpenses.filter((f) => f.cardId === card.id);
 
   const rule = ruleFromCard(card);
-  const alert = rule ? paymentAlert(rule, card.dueDays ?? null, m.debt > 0.5, card.lastPaymentAt ?? null, new Date(), 5, card.createdAt ?? null) : null;
+  const since = cardSince(card, purchases);
+  const alert = rule ? paymentAlert(rule, card.dueDays ?? null, m.debt > 0.5, card.lastPaymentAt ?? null, new Date(), 5, since) : null;
   // the statement due now (the resumen awaiting payment) — the anchor each purchase is placed
   // against; one bought after it closed lands in a later statement (see purchaseNextClosing)
-  const curClosing = rule ? currentDueClosing(rule, new Date(), card.lastPaymentAt ?? null, card.createdAt ?? null) : null;
+  const curClosing = rule ? currentDueClosing(rule, new Date(), card.lastPaymentAt ?? null, since) : null;
   // can this card's statement be paid right now? (closed, and not already in history)
   const payState = statementPayState(card, purchases, fixedExpenses, rates, snapshots);
 
@@ -121,7 +122,7 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
 
             <div style={{ borderTop: "1px solid rgba(120,110,180,.16)", marginTop: 14, paddingTop: 14, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
               {card.closingRuleType ? (
-                <ClosingInfo card={card} alert={alert?.level ?? null} />
+                <ClosingInfo card={card} purchases={purchases} alert={alert?.level ?? null} />
               ) : (
                 <div className="text-[12px] font-semibold" style={{ color: "var(--tj-muted)" }}>Configurá el ciclo de cierre</div>
               )}

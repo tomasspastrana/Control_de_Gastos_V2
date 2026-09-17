@@ -1,5 +1,6 @@
-import type { Card } from "@/lib/types";
+import type { Card, Purchase } from "@/lib/types";
 import { currentDueClosing, daysUntil, dueDate, fmtClosing, ruleFromCard } from "@/lib/closing";
+import { cardSince } from "@/lib/statements";
 
 function daysLabel(n: number): string {
   if (n < 0) return n === -1 ? "hace 1 día" : `hace ${-n} días`;
@@ -10,13 +11,13 @@ function daysLabel(n: number): string {
 
 type AlertLevel = "due-soon" | "overdue" | null;
 
-export function ClosingInfo({ card, compact = false, alert = null }: { card: Card; compact?: boolean; alert?: AlertLevel }) {
+export function ClosingInfo({ card, purchases, compact = false, alert = null }: { card: Card; purchases: Purchase[]; compact?: boolean; alert?: AlertLevel }) {
   const rule = ruleFromCard(card);
   if (!rule) return null;
 
   // the statement currently awaiting payment (the resumen that already closed but isn't paid yet),
   // or the next upcoming closing once it's settled — matches "Pagar tarjeta" / the payment alert.
-  const close = currentDueClosing(rule, new Date(), card.lastPaymentAt ?? null, card.createdAt ?? null);
+  const close = currentDueClosing(rule, new Date(), card.lastPaymentAt ?? null, cardSince(card, purchases));
   const closeDays = daysUntil(close);
   const due = card.dueDays != null ? dueDate(close, card.dueDays) : null;
   const dueDaysLeft = due ? daysUntil(due) : null;

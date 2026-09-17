@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   amountDueThisMonth,
   buildPaidSnapshot,
+  cardSince,
   cardStatement,
   currentStatement,
   generalStatement,
@@ -195,14 +196,84 @@ describe("statementPayState (un resumen se paga una sola vez, y recién cuando c
     expect(statementPayState(stamped, purchases, [], rates, [], hoy).kind).toBe("payable");
   });
 
-  it("tarjeta dada de alta después del último cierre: todavía no tiene resumen que pagar", () => {
+  it("tarjeta dada de alta después del último cierre, sin compras anteriores: todavía no tiene resumen que pagar", () => {
     const nueva: Card = { ...card, createdAt: "2026-07-05" }; // el 30-jun cerró antes del alta
-    const st = statementPayState(nueva, purchases, [], rates, [], hoy);
+    const posteriores = [p({ id: "a", date: "2026-07-03" })]; // comprada después del cierre
+    const st = statementPayState(nueva, posteriores, [], rates, [], hoy);
     expect(st.kind).toBe("not-closed");
     if (st.kind !== "not-closed") return;
     expect(ymd(st.nextClosing)).toBe("2026-07-30");
     // alta el mismo día del cierre → ese resumen sí es pagable
-    expect(statementPayState({ ...card, createdAt: "2026-06-30" }, purchases, [], rates, [], hoy).kind).toBe("payable");
+    expect(statementPayState({ ...card, createdAt: "2026-06-30" }, posteriores, [], rates, [], hoy).kind).toBe("payable");
+  });
+
+  it("tarjeta dada de alta después del último cierre PERO con compras anteriores a él: ese resumen es nuestro", () => {
+    const nueva: Card = { ...card, createdAt: "2026-07-05" };
+    const st = statementPayState(nueva, purchases, [], rates, [], hoy); // compra del 10-jun → cerró el 30-jun
+    expect(st.kind).toBe("payable");
+    if (st.kind !== "payable") return;
+    expect(ymd(st.closing)).toBe("2026-06-30");
+    expect(st.stmt.items).toHaveLength(1);
+    // una compra anterior pero ya saldada no cuenta
+    const saldada = [p({ id: "a", installments: 3, paidInstallments: 3 })];
+    expect(statementPayState(nueva, saldada, [], rates, [], hoy).kind).toBe("not-closed");
+  });
+});
+
+describe("cardSince — desde cuándo los cierres son de la tarjeta", () => {
+  it("es el alta, salvo que haya compras pendientes anteriores", () => {
+    const c = { id: "c1", createdAt: "2026-09-13" };
+    expect(cardSince(c, [])).toBe("2026-09-13");
+    expect(cardSince(c, [p({ date: "2026-08-13" })])).toBe("2026-08-13");
+    expect(cardSince(c, [p({ date: "2026-08-13", cardId: "otra" })])).toBe("2026-09-13"); // de otra tarjeta
+    expect(cardSince(c, [p({ date: "2026-08-13", installments: 1, paidInstallments: 1 })])).toBe("2026-09-13"); // saldada
+    expect(cardSince(c, [], ["2026-08-01"])).toBe("2026-08-01"); // la línea del formulario
+    expect(cardSince({ id: "c1", createdAt: null }, [p({ date: "2026-08-13" })])).toBeNull();
+  });
+});
+
+describe("Cencopay dada de alta el 13/09 con compras del 13/08 (cerró el 10/09, vence el 18/09)", () => {
+  const cenco: Card = {
+    ...card, id: "cenco", nickname: "Noe Cenco",
+    closingRuleType: "weekday_from", closingDay: 6, closingWeekday: 4, closingBusinessAdjust: true, dueDays: 8,
+    createdAt: "2026-09-13",
+  };
+  const hoy17 = parseYmd("2026-09-17");
+  const compras = [
+    p({ id: "jumbo", cardId: "cenco", date: "2026-08-13", installments: 12, paidInstallments: 3 }),
+    p({ id: "sporting", cardId: "cenco", date: "2026-08-13", installments: 9, paidInstallments: 0 }),
+    p({ id: "comedor", cardId: "cenco", date: "2026-09-13", installments: 24, paidInstallments: 0 }), // después del cierre
+  ];
+
+  it("el resumen que vence ahora es el de septiembre, no el de octubre", () => {
+    const st = currentStatement(cenco, compras, [], rates, hoy17);
+    expect(ymd(st.closing!)).toBe("2026-09-10");
+    expect(ymd(st.due!)).toBe("2026-09-18");
+    expect(st.items.map((i) => `${i.label} ${i.sub}`)).toEqual(["m cuota 4/12", "m cuota 1/9"]);
+  });
+
+  it("las compras de agosto van a septiembre y la del 13/09 recién a octubre", () => {
+    const sep = cardStatement(cenco, compras, [], rates, 2026, 8, hoy17);
+    expect(ymd(sep.closing!)).toBe("2026-09-10");
+    expect(sep.items.map((i) => i.purchaseId)).toEqual(["jumbo", "sporting"]);
+    const oct = cardStatement(cenco, compras, [], rates, 2026, 9, hoy17);
+    expect(ymd(oct.closing!)).toBe("2026-10-08");
+    expect(oct.items.map((i) => `${i.purchaseId} ${i.sub}`)).toEqual(["jumbo cuota 5/12", "sporting cuota 2/9", "comedor cuota 1/24"]);
+  });
+
+  it("se puede pagar el resumen de septiembre", () => {
+    const st = statementPayState(cenco, compras, [], rates, [], hoy17);
+    expect(st.kind).toBe("payable");
+    if (st.kind !== "payable") return;
+    expect(ymd(st.closing)).toBe("2026-09-10");
+    expect(st.period).toBe("2026-09-01");
+  });
+
+  it("la segunda Cencopay (a partir del 20) sólo con una compra del 13/09 sigue sin resumen pendiente", () => {
+    const cenco2: Card = { ...cenco, id: "cenco2", closingDay: 20, dueDays: 13 };
+    const solo = [p({ id: "easy", cardId: "cenco2", date: "2026-09-13", installments: 24 })];
+    expect(statementPayState(cenco2, solo, [], rates, [], hoy17).kind).toBe("not-closed");
+    expect(ymd(currentStatement(cenco2, solo, [], rates, hoy17).closing!)).toBe("2026-09-24");
   });
 });
 

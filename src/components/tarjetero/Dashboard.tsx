@@ -57,7 +57,7 @@ function DashCard({ card, data, onOpen, onDelete }: { card: Card; data: AppData;
           <span style={{ fontSize: 10.5, color: "var(--tj-muted)", fontWeight: 600 }}>{Math.round(m.pct * 100)}% usado</span>
           <button onClick={onDelete} style={{ border: "none", background: "none", color: "#c86", fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0 }}>Eliminar</button>
         </div>
-        <ClosingInfo card={card} compact />
+        <ClosingInfo card={card} purchases={data.purchases} compact />
       </div>
     </div>
   );
