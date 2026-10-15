@@ -17,6 +17,7 @@ import { InstallmentDots } from "./InstallmentDots";
 import { PayControls } from "./PayControls";
 import { ClosingInfo } from "./ClosingInfo";
 import { StatementPayBox } from "./StatementPayBox";
+import { TentativeStatementBox } from "./TentativeStatementBox";
 import { SettledPurchases } from "./SettledPurchases";
 import { ClosingFields, buildClosingPayload, formFromCard, type ClosingForm } from "./ClosingFields";
 
@@ -133,6 +134,7 @@ export function CardDetail({ card, purchases, rates, fixedExpenses, snapshots, o
           </div>
 
           <StatementPayBox state={payState} onPay={onPayStatement} onUndo={onUndoPayStatement} />
+          <TentativeStatementBox card={card} purchases={purchases} fixedExpenses={fixedExpenses} rates={rates} />
           <button onClick={onDeleteCard} className="cursor-pointer rounded-[14px] p-[11px] text-[12.5px] font-bold" style={{ border: "1px solid rgba(214,69,90,.3)", background: "rgba(214,69,90,.06)", color: "var(--tj-danger)" }}>
             Eliminar tarjeta
           </button>

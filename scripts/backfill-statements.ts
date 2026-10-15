@@ -3,8 +3,10 @@
  * payment started writing history (the old "Cerrar mes" recomputed the month from already-mutated
  * data and silently saved nothing).
  *
- * `--period` is the month the statement CLOSED in, which is where Resúmenes files it — not the
- * month it was paid in (a resumen that closes in late July is typically paid in early August).
+ * `--period` is the month the statement BELONGS to (its consumption month, see `statementMonth`
+ * in src/lib/closing.ts), which is where Resúmenes files it — not the month it was paid in (a
+ * resumen that closes in late July is typically paid in early August), and for a card that closes
+ * early not the month of the closing date either (Cencopay closing 08/10 is "2026-09").
  * A card is reconstructed when its `last_payment_at` falls between that closing and the next
  * one, i.e. that payment is the one that settled this statement; each purchase's current
  * `paid_installments` is then the cuota that payment covered.
@@ -22,7 +24,7 @@
 import { config } from "dotenv";
 import postgres from "postgres";
 import { fmt, ownFraction, rate } from "../src/lib/calc";
-import { addDays, closingInMonth, dueDate, nextClosing, parseYmd, ruleFromCard, ymd } from "../src/lib/closing";
+import { addDays, closingForStatementMonth, dueDate, nextClosing, parseYmd, ruleFromCard, ymd } from "../src/lib/closing";
 import { periodKey } from "../src/lib/statements";
 import type { Currency, StatementSnapshotItem } from "../src/lib/types";
 
@@ -113,11 +115,7 @@ async function main() {
       console.log("   sin ciclo de cierre configurado — se omite");
       continue;
     }
-    const closing = closingInMonth(rule, year, month);
-    if (!closing) {
-      console.log(`   no cierra resumen en ${periodArg} — se omite`);
-      continue;
-    }
+    const closing = closingForStatementMonth(rule, year, month);
     // the payment must have landed in this statement's window: after it closed and before the
     // next one closed. Otherwise it settled a different month.
     const nextC = nextClosing(rule, addDays(closing, 1));

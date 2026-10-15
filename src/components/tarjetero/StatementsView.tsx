@@ -168,11 +168,14 @@ export function StatementsView({ cards, purchases, fixedExpenses, rates, snapsho
           {rows.map((r) => {
             const emptyMsg = !ruleFromCard(r.card)
               ? "Configurá el ciclo de cierre para ver su resumen."
-              : isPast
-                ? `Sin pago registrado en ${monthLabel(anchor.y, anchor.m)}.`
-                : !r.closing
-                  ? `No cierra resumen en ${monthLabel(anchor.y, anchor.m)}.`
-                  : "Sin cuotas ni gastos pendientes este mes.";
+              : !r.closing
+                ? `No cierra resumen en ${monthLabel(anchor.y, anchor.m)}.`
+                : // a card that closes early still has its resumen ahead of us in a "past" month
+                  r.closing > today
+                  ? `Cierra ${fmtClosing(r.closing)} · sin cargos todavía.`
+                  : isPast
+                    ? `Sin pago registrado en ${monthLabel(anchor.y, anchor.m)}.`
+                    : "Sin cuotas ni gastos pendientes este mes.";
             return (
               <div key={r.card.id} className="tj-glass-soft" style={{ padding: 20, borderRadius: 22 }}>
                 <button onClick={() => onOpenCard(r.card.id)} className="mb-3 flex w-full cursor-pointer items-start justify-between gap-3 border-none bg-transparent p-0 text-left">

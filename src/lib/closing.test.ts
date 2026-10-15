@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   type ClosingRule,
+  closingForStatementMonth,
   closingInMonth,
   closingSpan,
   currentDueClosing,
@@ -14,6 +15,8 @@ import {
   pendingClosing,
   purchaseStatement,
   ruleFromCard,
+  statementMonth,
+  statementMonthShift,
   upcomingClosings,
   ymd,
 } from "./closing";
@@ -169,6 +172,59 @@ describe("closingSpan", () => {
   it("solo mira el mes: el día exacto del cierre no cambia la cuenta", () => {
     // el ancla de weekday_cycle se mueve dentro del mes, pero sigue siendo un cierre por mes
     expect(closingSpan(parseYmd("2026-08-27"), parseYmd("2026-09-24"))).toBe(1);
+  });
+});
+
+describe("mes del resumen (a qué mes pertenece lo que cierra)", () => {
+  // las cinco reglas confirmadas en banks.ts
+  const cenco: ClosingRule = { type: "weekday_from", weekday: 4, fromDay: 6, businessAdjust: true };
+  const cenco2: ClosingRule = { type: "weekday_from", weekday: 4, fromDay: 20, businessAdjust: true };
+  const uala: ClosingRule = { type: "fixed_day", day: 30, businessAdjust: true };
+  const suc: ClosingRule = { type: "fixed_day", day: 23, businessAdjust: false };
+  const bbva: ClosingRule = { type: "weekday_cycle", ...deriveWeekdayCycle("2026-04-23", "2026-05-21") }; // 3er jueves
+  const temprana: ClosingRule = { type: "weekday_cycle", ...deriveWeekdayCycle("2026-05-28", "2026-07-02") }; // 1er jueves
+
+  it("la tarjeta que cierra temprano lleva el mes anterior; la que cierra tarde, el suyo", () => {
+    expect(statementMonthShift(cenco)).toBe(-1); // cierra entre el 6 y el 12
+    expect(statementMonthShift(temprana)).toBe(-1); // 1er jueves
+    expect(statementMonthShift(cenco2)).toBe(0); // cierra entre el 20 y el 26
+    expect(statementMonthShift(uala)).toBe(0);
+    expect(statementMonthShift(suc)).toBe(0);
+    expect(statementMonthShift(bbva)).toBe(0); // 3er jueves
+  });
+
+  it("Cencopay: el que cerró el 10/09 es el de AGOSTO y el que cierra el 08/10 el de septiembre", () => {
+    expect(statementMonth(cenco, parseYmd("2026-09-10"))).toEqual({ year: 2026, month: 7 }); // agosto
+    expect(statementMonth(cenco, parseYmd("2026-10-08"))).toEqual({ year: 2026, month: 8 }); // septiembre
+    expect(ymd(closingForStatementMonth(cenco, 2026, 7))).toBe("2026-09-10");
+    expect(ymd(closingForStatementMonth(cenco, 2026, 8))).toBe("2026-10-08");
+  });
+
+  it("cruza el año para atrás", () => {
+    expect(statementMonth(cenco, parseYmd("2027-01-07"))).toEqual({ year: 2026, month: 11 }); // diciembre
+    expect(ymd(closingForStatementMonth(cenco, 2026, 11))).toBe("2027-01-07");
+  });
+
+  it("las que cierran tarde no se mueven", () => {
+    expect(statementMonth(uala, parseYmd("2026-09-30"))).toEqual({ year: 2026, month: 8 });
+    expect(statementMonth(suc, parseYmd("2026-09-23"))).toEqual({ year: 2026, month: 8 });
+    expect(ymd(closingForStatementMonth(cenco2, 2026, 8))).toBe("2026-09-24");
+  });
+
+  // el invariante que sostiene todo el motor: exactamente un resumen por mes calendario
+  it("mes de resumen ↔ cierre es una biyección: 24 meses seguidos, sin saltos ni repetidos", () => {
+    for (const [name, rule] of Object.entries({ cenco, cenco2, uala, suc, bbva, temprana })) {
+      const closings = upcomingClosings(rule, parseYmd("2026-01-01"), 24);
+      const months = closings.map((c) => statementMonth(rule, c));
+      // ida y vuelta: del cierre al mes y del mes al mismo cierre
+      closings.forEach((c, i) => {
+        expect(ymd(closingForStatementMonth(rule, months[i].year, months[i].month)), name).toBe(ymd(c));
+      });
+      // 24 meses distintos y consecutivos
+      const idx = months.map((m) => m.year * 12 + m.month);
+      expect(new Set(idx).size, name).toBe(24);
+      idx.forEach((v, i) => expect(v - idx[0], `${name} #${i}`).toBe(i));
+    }
   });
 });
 

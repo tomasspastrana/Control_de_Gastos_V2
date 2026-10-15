@@ -165,6 +165,26 @@ Analizando los resúmenes encontramos **tres patrones**:
 **próximo cierre** y el **vencimiento** (`cierre + N días`, movido a hábil siguiente). Como puede
 haber corrimientos, la fecha es **editable y se re-ancla**.
 
+### A qué mes pertenece un resumen (`statementMonth`)
+Un resumen factura la ventana **entre el cierre anterior y el suyo**, así que pertenece al mes que
+cubre la mayor parte de esa ventana — **no necesariamente al mes en que cae la fecha de cierre**.
+Cencopay cierra a principios de mes, entonces el resumen que **cierra el 08/10 es el de septiembre**
+y el que **cerró el 10/09 es el de agosto**. Ualá (día 30) y Sucrédito (día 23) cierran tarde y
+llevan el mes de su propio cierre.
+
+El corrimiento se decide **una vez por regla** (`statementMonthShift`: `0` o `-1` mes, según el día
+"típico" de cierre — el centro de su banda — sea posterior o anterior al 15), nunca por fecha de
+cierre. Eso conserva el invariante sobre el que descansa todo el motor —**exactamente un resumen por
+mes calendario**, ver `closingForMonth` y `closingSpan`— así que `statementMonth` ↔ cierre es una
+**biyección** y ningún mes puede quedar con dos resúmenes ni con ninguno (hay un test que lo recorre
+sobre 24 cierres de cada regla).
+
+`closingForStatementMonth` es la inversa y es la que usa el cronograma de cuotas (`cardStatement`),
+así que el navegador de meses de **Resúmenes** y la clave `period` de `statement_snapshots` hablan
+todos en meses de resumen. Si cambia esta derivación hay que reescribir los snapshots guardados con
+`npm run db:relabel`: `period` es lo que marca un resumen como pagado (el índice único
+`(user_id, card_id, period)` es el candado anti-doble-pago).
+
 ### Seguridad (RLS)
 Aunque el código ya filtra por `user_id`, las **políticas RLS** en Postgres son la red de seguridad
 real: un usuario **no puede** leer ni escribir filas de otro, aunque hubiera un bug en el código.

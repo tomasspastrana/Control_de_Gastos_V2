@@ -1,7 +1,7 @@
 "use client";
 
 import { fmt } from "@/lib/calc";
-import { daysUntil, fmtClosing, fmtMonth, parseYmd } from "@/lib/closing";
+import { daysLabel, daysUntil, fmtClosing, fmtMonth, parseYmd } from "@/lib/closing";
 import { snapshotOwnTotal, type CardStatement, type PayState } from "@/lib/statements";
 import { OwnAmount } from "./OwnAmount";
 
@@ -9,13 +9,6 @@ interface Props {
   state: PayState;
   onPay: (stmt: CardStatement, closing: Date) => void;
   onUndo: (period: string) => void;
-}
-
-function daysLabel(n: number): string {
-  if (n < 0) return n === -1 ? "hace 1 día" : `hace ${-n} días`;
-  if (n === 0) return "hoy";
-  if (n === 1) return "mañana";
-  return `en ${n} días`;
 }
 
 /**
@@ -43,13 +36,13 @@ export function StatementPayBox({ state, onPay, onUndo }: Props) {
   }
 
   if (state.kind === "paid") {
-    const { snapshot, closing, period } = state;
+    const { snapshot, period } = state;
     return (
       <Box>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[13px] font-extrabold" style={{ color: "var(--tj-good)" }}>
-              ✓ Resumen de {fmtMonth(closing)} pagado
+              ✓ Resumen de {fmtMonth(parseYmd(period))} pagado
             </div>
             <div className="mt-0.5 text-[11.5px] font-semibold" style={{ color: "var(--tj-muted)" }}>
               {snapshot.paidAt ? `el ${fmtClosing(parseYmd(snapshot.paidAt))} · ` : ""}
@@ -73,12 +66,12 @@ export function StatementPayBox({ state, onPay, onUndo }: Props) {
   }
 
   // payable — the statement closed and has no payment recorded yet
-  const { stmt, closing, due } = state;
+  const { stmt, closing, due, period } = state;
   if (stmt.total <= 0.5) {
     return (
       <Box>
         <Note>
-          El resumen de {fmtMonth(closing)} cerró sin cargos. Nada para pagar.
+          El resumen de {fmtMonth(parseYmd(period))} cerró sin cargos. Nada para pagar.
         </Note>
       </Box>
     );
@@ -101,7 +94,7 @@ export function StatementPayBox({ state, onPay, onUndo }: Props) {
   );
 }
 
-function Box({ children }: { children: React.ReactNode }) {
+export function Box({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-[15px]" style={{ padding: "13px 15px", background: "rgba(255,255,255,.5)", border: "1px solid rgba(120,110,180,.18)" }}>
       {children}
@@ -109,7 +102,7 @@ function Box({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Note({ children }: { children: React.ReactNode }) {
+export function Note({ children }: { children: React.ReactNode }) {
   return (
     <div className="text-[12px] font-semibold" style={{ color: "var(--tj-muted)" }}>
       {children}

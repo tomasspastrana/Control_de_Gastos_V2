@@ -5,20 +5,26 @@
 // The date only ever pushes an installment FORWARD, never back: a backdated purchase loaded with
 // "cuotas pagadas" still resumes from where the user says it is.
 // Recurring fixed expenses appear in every statement.
+//
+// A statement is filed under the month it BELONGS to (its consumption month, see `statementMonth`
+// in closing.ts), not the month its closing date falls in: a Cencopay resumen closing 08/10 is
+// "Septiembre". Everything here — the (year, month) arguments, `periodKey`, the snapshot `period` —
+// speaks in statement months.
 
 import type { Card, Debt, FixedExpense, Purchase, Rates, StatementSnapshot } from "./types";
 import { debtsMonthly, fixedMonthly, purchaseInstallment, purchaseOwnInstallment, rate } from "./calc";
 import {
   addDays,
+  closingForStatementMonth,
   closingSpan,
   currentDueClosing,
   dueDate,
-  forwardClosingInMonth,
   lastClosingOnOrBefore,
   nextClosing,
   parseYmd,
   purchaseStatement,
   ruleFromCard,
+  statementMonth,
   type ClosingRule,
   ymd,
 } from "./closing";
@@ -122,7 +128,7 @@ function fixedItem(f: FixedExpense, rates: Rates): StatementItem {
 }
 
 /**
- * One card's statement for calendar (year, month), anchored to `from` (today).
+ * One card's statement for statement month (year, month), anchored to `from` (today).
  * `offset` (0 = current/next closing) decides which installment number of each purchase falls
  * here: the (paidInstallments + 1 + offset)-th, as long as it's still pending — capped per
  * purchase so nothing is billed before its own first closing.
@@ -142,9 +148,11 @@ export function cardStatement(
 
   // anchor offset 0 on the resumen actually due now (may have closed earlier this month)
   const start = currentDueClosing(rule, from, card.lastPaymentAt ?? null, cardSince(card, purchases));
-  const found = forwardClosingInMonth(rule, year, month, from, start);
-  if (!found) return { ...base, closing: null, due: null, items: [], total: 0, ownTotal: 0 };
-  const { closing, offset } = found;
+  const closing = closingForStatementMonth(rule, year, month);
+  // a statement that closed before the one due now is already history → nothing to bill here
+  if (closing < start) return { ...base, closing: null, due: null, items: [], total: 0, ownTotal: 0 };
+  // every rule closes exactly once per calendar month, so the statement distance is the month distance
+  const offset = closingSpan(start, closing);
 
   const items: StatementItem[] = [];
   for (const p of purchases) {
@@ -213,6 +221,27 @@ export function currentStatement(
   const rule = ruleFromCard(card);
   const closing = rule ? currentDueClosing(rule, from, card.lastPaymentAt ?? null, cardSince(card, purchases)) : null;
   return statementAt(card, purchases, fixed, rates, closing);
+}
+
+/**
+ * The statement still being built: the first closing strictly ahead of `from`. Read-only — it
+ * can't be paid until it closes, so it never has a snapshot. Goes through `cardStatement` so the
+ * installment offsets come out right either way: if the previous resumen is already paid this is
+ * cuota paidInstallments+1, and if it closed but is still unpaid it's paidInstallments+2.
+ * Null for cards without a billing cycle.
+ */
+export function openStatement(
+  card: Card,
+  purchases: Purchase[],
+  fixed: FixedExpense[],
+  rates: Rates,
+  from: Date = new Date(),
+): CardStatement | null {
+  const rule = ruleFromCard(card);
+  if (!rule) return null;
+  const closing = nextClosing(rule, addDays(from, 1)); // strictly ahead: a closing today already happened
+  const { year, month } = statementMonth(rule, closing);
+  return cardStatement(card, purchases, fixed, rates, year, month, from);
 }
 
 export interface GeneralStatement {
@@ -287,6 +316,12 @@ export function periodKey(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}-01`;
 }
 
+/** Period key of the statement closing on `closing`: its consumption month, not the closing's. */
+export function statementPeriod(rule: ClosingRule, closing: Date): string {
+  const { year, month } = statementMonth(rule, closing);
+  return periodKey(year, month);
+}
+
 /**
  * Where a card stands with respect to paying its statement. A statement can only be paid once
  * it has closed, and only once: the saved snapshot for its period IS the "already paid" record,
@@ -320,7 +355,7 @@ export function statementPayState(
     return { kind: "not-closed", nextClosing: nextClosing(rule, from) };
   }
 
-  const period = periodKey(closing.getFullYear(), closing.getMonth());
+  const period = statementPeriod(rule, closing);
   const snapshot = snapshots.find((s) => s.cardId === card.id && s.period === period);
   if (snapshot) {
     return { kind: "paid", closing, period, snapshot, nextClosing: nextClosing(rule, addDays(closing, 1)) };
@@ -332,7 +367,8 @@ export function statementPayState(
 
 /**
  * Freeze a statement into a history row at payment time. The period is the month the statement
- * CLOSED in (not the month it's paid in), which is where the Resúmenes tab looks it up.
+ * BELONGS to (`statementPeriod`) — neither the month it's paid in nor, for a card that closes
+ * early, the month its closing falls in. That's where the Resúmenes tab looks it up.
  * `purchaseId` is kept on each line so "Deshacer pago" can roll back exactly what it advanced.
  */
 export function buildPaidSnapshot(
@@ -341,9 +377,10 @@ export function buildPaidSnapshot(
   closing: Date,
   paidAt: string,
 ): Omit<StatementSnapshot, "id"> {
+  const rule = ruleFromCard(card);
   return {
     cardId: card.id,
-    period: periodKey(closing.getFullYear(), closing.getMonth()),
+    period: rule ? statementPeriod(rule, closing) : periodKey(closing.getFullYear(), closing.getMonth()),
     nickname: card.nickname,
     closingDate: ymd(closing),
     dueDate: stmt.due ? ymd(stmt.due) : null,

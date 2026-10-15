@@ -102,7 +102,9 @@ export const statementSnapshots = pgTable(
     cardId: uuid("card_id")
       .notNull()
       .references(() => cards.id, { onDelete: "cascade" }),
-    period: date("period", { mode: "string" }).notNull(), // yyyy-mm-01 (month the statement closed in)
+    // yyyy-mm-01 — the month the statement BELONGS to (its consumption month, see `statementMonth`
+    // in src/lib/closing.ts), which for a card that closes early is the month before its closing date
+    period: date("period", { mode: "string" }).notNull(),
     nickname: text("nickname").notNull(),
     closingDate: date("closing_date", { mode: "string" }),
     dueDate: date("due_date", { mode: "string" }),

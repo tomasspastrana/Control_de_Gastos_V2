@@ -6,6 +6,7 @@ import {
   cardStatement,
   currentStatement,
   generalStatement,
+  openStatement,
   purchaseNextClosing,
   snapshotOwnTotal,
   statementPayState,
@@ -233,6 +234,8 @@ describe("cardSince — desde cuándo los cierres son de la tarjeta", () => {
 });
 
 describe("Cencopay dada de alta el 13/09 con compras del 13/08 (cerró el 10/09, vence el 18/09)", () => {
+  // cierra el 1er jueves desde el 6 → factura casi todo el mes anterior: el cierre del 10/09 es el
+  // resumen de AGOSTO (mes 7) y el del 08/10 el de septiembre (mes 8)
   const cenco: Card = {
     ...card, id: "cenco", nickname: "Noe Cenco",
     closingRuleType: "weekday_from", closingDay: 6, closingWeekday: 4, closingBusinessAdjust: true, dueDays: 8,
@@ -245,28 +248,28 @@ describe("Cencopay dada de alta el 13/09 con compras del 13/08 (cerró el 10/09,
     p({ id: "comedor", cardId: "cenco", date: "2026-09-13", installments: 24, paidInstallments: 0 }), // después del cierre
   ];
 
-  it("el resumen que vence ahora es el de septiembre, no el de octubre", () => {
+  it("el resumen que vence ahora es el que cerró el 10/09, no el del 08/10", () => {
     const st = currentStatement(cenco, compras, [], rates, hoy17);
     expect(ymd(st.closing!)).toBe("2026-09-10");
     expect(ymd(st.due!)).toBe("2026-09-18");
     expect(st.items.map((i) => `${i.label} ${i.sub}`)).toEqual(["m cuota 4/12", "m cuota 1/9"]);
   });
 
-  it("las compras de agosto van a septiembre y la del 13/09 recién a octubre", () => {
-    const sep = cardStatement(cenco, compras, [], rates, 2026, 8, hoy17);
-    expect(ymd(sep.closing!)).toBe("2026-09-10");
-    expect(sep.items.map((i) => i.purchaseId)).toEqual(["jumbo", "sporting"]);
-    const oct = cardStatement(cenco, compras, [], rates, 2026, 9, hoy17);
-    expect(ymd(oct.closing!)).toBe("2026-10-08");
-    expect(oct.items.map((i) => `${i.purchaseId} ${i.sub}`)).toEqual(["jumbo cuota 5/12", "sporting cuota 2/9", "comedor cuota 1/24"]);
+  it("las compras de agosto van al resumen de agosto y la del 13/09 recién al de septiembre", () => {
+    const ago = cardStatement(cenco, compras, [], rates, 2026, 7, hoy17); // agosto → cierra 10/09
+    expect(ymd(ago.closing!)).toBe("2026-09-10");
+    expect(ago.items.map((i) => i.purchaseId)).toEqual(["jumbo", "sporting"]);
+    const sep = cardStatement(cenco, compras, [], rates, 2026, 8, hoy17); // septiembre → cierra 08/10
+    expect(ymd(sep.closing!)).toBe("2026-10-08");
+    expect(sep.items.map((i) => `${i.purchaseId} ${i.sub}`)).toEqual(["jumbo cuota 5/12", "sporting cuota 2/9", "comedor cuota 1/24"]);
   });
 
-  it("se puede pagar el resumen de septiembre", () => {
+  it("se puede pagar el resumen de agosto, archivado en 2026-08 (no en 2026-09)", () => {
     const st = statementPayState(cenco, compras, [], rates, [], hoy17);
     expect(st.kind).toBe("payable");
     if (st.kind !== "payable") return;
     expect(ymd(st.closing)).toBe("2026-09-10");
-    expect(st.period).toBe("2026-09-01");
+    expect(st.period).toBe("2026-08-01");
   });
 
   it("la segunda Cencopay (a partir del 20) sólo con una compra del 13/09 sigue sin resumen pendiente", () => {
@@ -278,7 +281,7 @@ describe("Cencopay dada de alta el 13/09 con compras del 13/08 (cerró el 10/09,
 });
 
 describe("buildPaidSnapshot", () => {
-  it("archiva el resumen en el mes en que CERRÓ, no en el que se paga", () => {
+  it("una tarjeta que cierra tarde archiva en el mes del cierre, no en el que se paga", () => {
     const closing = parseYmd("2026-06-30");
     const stmt = cardStatement(card, [p({ id: "a", installments: 3, paidInstallments: 1 })], [], rates, 2026, 5, hoy);
     const snap = buildPaidSnapshot(card, stmt, closing, "2026-07-08"); // pagado en julio
@@ -288,6 +291,51 @@ describe("buildPaidSnapshot", () => {
     // el purchaseId viaja en el jsonb para poder deshacer el pago exacto
     expect(snap.items[0].purchaseId).toBe("a");
     expect(snap.total).toBe(stmt.total);
+  });
+
+  it("una tarjeta que cierra temprano archiva en el mes anterior al del cierre", () => {
+    const cenco: Card = {
+      ...card, id: "cenco", nickname: "Noe Cenco",
+      closingRuleType: "weekday_from", closingDay: 6, closingWeekday: 4, closingBusinessAdjust: true, dueDays: 8,
+    };
+    const closing = parseYmd("2026-09-10");
+    const stmt = cardStatement(cenco, [p({ id: "a", cardId: "cenco", installments: 3, paidInstallments: 1 })], [], rates, 2026, 7, parseYmd("2026-09-17"));
+    const snap = buildPaidSnapshot(cenco, stmt, closing, "2026-09-19");
+    expect(snap.period).toBe("2026-08-01"); // el resumen de agosto, aunque cerró en septiembre
+    expect(snap.closingDate).toBe("2026-09-10");
+  });
+});
+
+describe("openStatement — el resumen en curso (tentativo)", () => {
+  const cenco: Card = {
+    ...card, id: "cenco", nickname: "Noe Cenco",
+    closingRuleType: "weekday_from", closingDay: 6, closingWeekday: 4, closingBusinessAdjust: true, dueDays: 8,
+    createdAt: "2026-08-01",
+  };
+  const compras = [p({ id: "jumbo", cardId: "cenco", date: "2026-07-20", installments: 12, paidInstallments: 3 })];
+  const hoy = parseYmd("2026-10-05"); // el 10/09 ya cerró, el 08/10 todavía no
+
+  it("es el primer cierre futuro, con su vencimiento", () => {
+    const st = openStatement(cenco, compras, [], rates, hoy)!;
+    expect(ymd(st.closing!)).toBe("2026-10-08");
+    expect(ymd(st.due!)).toBe("2026-10-16");
+  });
+
+  it("con el resumen anterior impago cobra la cuota siguiente a la que está por pagarse", () => {
+    // el del 10/09 (cuota 4) sigue impago → el tentativo es la cuota 5
+    expect(openStatement(cenco, compras, [], rates, hoy)!.items[0].sub).toBe("cuota 5/12");
+  });
+
+  it("con el resumen anterior ya pagado cobra la cuota siguiente a la pagada", () => {
+    // pagar avanzó paidInstallments a 4 → el tentativo es la cuota 5, mismo cierre
+    const pagada = [p({ id: "jumbo", cardId: "cenco", date: "2026-07-20", installments: 12, paidInstallments: 4 })];
+    const st = openStatement({ ...cenco, lastPaymentAt: "2026-09-19" }, pagada, [], rates, hoy)!;
+    expect(ymd(st.closing!)).toBe("2026-10-08");
+    expect(st.items[0].sub).toBe("cuota 5/12");
+  });
+
+  it("sin ciclo de cierre configurado devuelve null", () => {
+    expect(openStatement({ ...cenco, closingRuleType: null, closingDay: null, closingWeekday: null }, compras, [], rates, hoy)).toBeNull();
   });
 });
 

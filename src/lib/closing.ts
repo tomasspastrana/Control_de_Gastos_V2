@@ -119,6 +119,54 @@ function closingForMonth(rule: ClosingRule, year: number, month: number): Date {
   }
 }
 
+// ---- which month a statement BELONGS to ----
+// A statement bills the window between the previous closing and its own, so the month it belongs
+// to is the one holding most of that window — not necessarily the month the closing falls in.
+// A card that closes early (Cencopay: first Thursday from the 6th) bills almost all of the
+// previous month: the resumen closing 08/10 is "Septiembre", the one that closed 10/09 is "Agosto".
+// A card closing late in the month (Ualá the 30th, Sucrédito the 23rd) bills its own month.
+//
+// The shift is decided ONCE PER RULE (0 or -1 month), never per closing date. That keeps the
+// invariant the whole engine rests on — exactly one statement per calendar month, see
+// `closingForMonth` and `closingSpan` — so statement month ↔ closing stays a bijection and no
+// month can end up with two statements or none.
+
+/**
+ * The day of the month this rule "typically" closes on — the centre of its band of closings.
+ * Year-independent: `fixed_day` closes on that day (businessAdjust moves it back ≤3 days) and the
+ * weekday rules land somewhere inside a 7-day window.
+ */
+function typicalClosingDay(rule: ClosingRule): number {
+  switch (rule.type) {
+    case "fixed_day":
+      return rule.day;
+    case "weekday_from":
+      return rule.fromDay + 3; // middle of the 7-day window that starts at fromDay
+    case "weekday_cycle": {
+      const ordinal = Math.ceil(parseYmd(rule.anchor).getDate() / 7); // 1..5
+      return ordinal * 7 - 3; // middle of that week
+    }
+  }
+}
+
+/** -1 when the statement carries the month BEFORE its closing, 0 when it carries the closing's own. */
+export function statementMonthShift(rule: ClosingRule): 0 | -1 {
+  return typicalClosingDay(rule) <= 15 ? -1 : 0;
+}
+
+/** The calendar month the statement closing on `closing` belongs to (0-based month). */
+export function statementMonth(rule: ClosingRule, closing: Date): { year: number; month: number } {
+  const d = new Date(closing.getFullYear(), closing.getMonth() + statementMonthShift(rule), 1);
+  return { year: d.getFullYear(), month: d.getMonth() };
+}
+
+/** The inverse of `statementMonth`: the closing of the statement that belongs to (year, month). */
+export function closingForStatementMonth(rule: ClosingRule, year: number, month: number): Date {
+  // shift -1 ⇒ the statement of month M closes in M+1
+  const d = new Date(year, month - statementMonthShift(rule), 1);
+  return closingForMonth(rule, d.getFullYear(), d.getMonth());
+}
+
 /** Next closing date on or after `from` (defaults to today). */
 export function nextClosing(rule: ClosingRule, from: Date = new Date()): Date {
   const start = atMidnight(from);
@@ -177,6 +225,9 @@ export function currentDueClosing(
  * falls in calendar (year, month) and return it with its offset. Null when that month has no
  * closing ahead (past months, or months the cycle skips). `start` defaults to the next closing
  * on/after `from`; pass `currentDueClosing(...)` to anchor on the resumen actually due now.
+ *
+ * Matches on the CLOSING's calendar month. The installment scheduler (`cardStatement`) resolves by
+ * STATEMENT month instead — see `closingForStatementMonth`.
  */
 export function forwardClosingInMonth(
   rule: ClosingRule,
@@ -274,6 +325,14 @@ export function paymentAlert(
 /** Whole days from `from` (today) until `date` (negative if past). */
 export function daysUntil(date: Date, from: Date = new Date()): number {
   return Math.round((atMidnight(date).getTime() - atMidnight(from).getTime()) / 86_400_000);
+}
+
+/** Human countdown for a `daysUntil` result: "hace 3 días" / "hoy" / "mañana" / "en 3 días". */
+export function daysLabel(n: number): string {
+  if (n < 0) return n === -1 ? "hace 1 día" : `hace ${-n} días`;
+  if (n === 0) return "hoy";
+  if (n === 1) return "mañana";
+  return `en ${n} días`;
 }
 
 /** Derive a weekday_cycle rule from two consecutive real closing dates (prev < last). */

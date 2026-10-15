@@ -1,13 +1,6 @@
 import type { Card, Purchase } from "@/lib/types";
-import { currentDueClosing, daysUntil, dueDate, fmtClosing, ruleFromCard } from "@/lib/closing";
+import { currentDueClosing, daysLabel, daysUntil, dueDate, fmtClosing, ruleFromCard } from "@/lib/closing";
 import { cardSince } from "@/lib/statements";
-
-function daysLabel(n: number): string {
-  if (n < 0) return n === -1 ? "hace 1 día" : `hace ${-n} días`;
-  if (n === 0) return "hoy";
-  if (n === 1) return "mañana";
-  return `en ${n} días`;
-}
 
 type AlertLevel = "due-soon" | "overdue" | null;
 
